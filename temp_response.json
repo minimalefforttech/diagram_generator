@@ -1,0 +1,1 @@
+{"diagram":"sequenceDiagram\n    participant Client as \"Client\"\n    participant Server as \"Server\"\n\n    Client->>Server: Send Request\n    alt Success\n        Server->>Client: Respond\n    else Failure\n        Server->>Client: Error Response\n    end","type":"mermaid","notes":["Failed to parse JSON response"]}
