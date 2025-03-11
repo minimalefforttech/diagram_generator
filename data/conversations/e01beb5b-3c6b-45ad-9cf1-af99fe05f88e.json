@@ -1,0 +1,28 @@
+{
+  "id": "e01beb5b-3c6b-45ad-9cf1-af99fe05f88e",
+  "diagram_id": "87e1c872-3360-4afd-a7b3-b561fd9644a6",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Create an API diagram",
+      "timestamp": "2025-03-11 14:39:05.796420",
+      "metadata": {
+        "type": "initial_request"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "graph TD;\nA[API] --> B[Database];",
+      "timestamp": "2025-03-11 14:39:05.796420",
+      "metadata": {
+        "type": "generation",
+        "diagram_type": "mermaid"
+      }
+    }
+  ],
+  "created_at": "2025-03-11 14:39:05.796420",
+  "updated_at": "2025-03-11 14:39:05.796420",
+  "metadata": {
+    "rag_context": "Use this API context:\nAPI Documentation Context\n\n"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "id": "4f3a4311-d8a3-4fee-be8f-218db84e55ae",
+  "diagram_id": "5c0ed12d-fff6-4659-af2f-e361534e4ac0",
+  "messages": [
+    {
+      "role": "user",
+      "content": "test diagram",
+      "timestamp": "2025-03-11 12:38:35.966014",
+      "metadata": {
+        "type": "initial_request"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "```mermaid\ngraph LR;\n    A[Start] --> B{Decision 1};\n    B -- Yes --> C[Action 1];\n    B -- No --> D[Action 2];\n    C --> E[End];\n    D --> F[Error Handling];\n    F --> G[End];\n```",
+      "timestamp": "2025-03-11 12:38:35.966014",
+      "metadata": {
+        "type": "generation",
+        "diagram_type": "mermaid"
+      }
+    }
+  ],
+  "created_at": "2025-03-11 12:38:35.966014",
+  "updated_at": "2025-03-11 12:38:35.966014",
+  "metadata": {
+    "rag_context": "Use the following API documentation context to assist with the diagram creation:\ncontext1\n\n"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "id": "8fe43f68-e297-4167-be51-2279613e9009",
+  "diagram_id": "cec264c8-23cc-414e-a23c-ea0f0155b0a6",
+  "messages": [
+    {
+      "role": "user",
+      "content": "test_0",
+      "timestamp": "2025-03-11 14:25:04.979785",
+      "metadata": {
+        "type": "initial_request"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "graph TD;\n    A[Start] -->|test_0|> B[End]",
+      "timestamp": "2025-03-11 14:25:04.979785",
+      "metadata": {
+        "type": "generation",
+        "diagram_type": "mermaid"
+      }
+    }
+  ],
+  "created_at": "2025-03-11 14:25:04.979785",
+  "updated_at": "2025-03-11 14:25:04.979785",
+  "metadata": {
+    "rag_context": null
+  }
+}

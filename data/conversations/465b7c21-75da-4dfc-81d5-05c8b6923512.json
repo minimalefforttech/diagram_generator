@@ -1,0 +1,28 @@
+{
+  "id": "465b7c21-75da-4dfc-81d5-05c8b6923512",
+  "diagram_id": "d72d3a2a-2872-43dd-bc4a-a8f9152b0134",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Create a simple flowchart",
+      "timestamp": "2025-03-11 14:39:14.364567",
+      "metadata": {
+        "type": "initial_request"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "Here is a minimal diagram in Mermaid syntax:\n\n\ngraph TD;\nA-->B;\nB-->C;\n\n\nDescription: A simple flow from A to B, then from B to C.",
+      "timestamp": "2025-03-11 14:39:14.364567",
+      "metadata": {
+        "type": "generation",
+        "diagram_type": "mermaid"
+      }
+    }
+  ],
+  "created_at": "2025-03-11 14:39:14.364567",
+  "updated_at": "2025-03-11 14:39:14.364567",
+  "metadata": {
+    "rag_context": null
+  }
+}

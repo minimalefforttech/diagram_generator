@@ -1,0 +1,28 @@
+{
+  "id": "13f417da-0c66-4e15-9cb5-33ca27a9143e",
+  "diagram_id": "73bee9a8-1297-4c11-8cb7-7f8b62493e00",
+  "messages": [
+    {
+      "role": "user",
+      "content": "test diagram",
+      "timestamp": "2025-03-11 14:39:23.516163",
+      "metadata": {
+        "type": "initial_request"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "Here is a minimal diagram using Mermaid syntax:\n\n\ngraph TD;\n    A[User] --> B[System];\n    B --> C[Database];\n\nDescription: API request flow\n\n\nThis diagram shows a simple flow from the User to the System, which then connects to the Database.",
+      "timestamp": "2025-03-11 14:39:23.516163",
+      "metadata": {
+        "type": "generation",
+        "diagram_type": "mermaid"
+      }
+    }
+  ],
+  "created_at": "2025-03-11 14:39:23.516163",
+  "updated_at": "2025-03-11 14:39:23.516163",
+  "metadata": {
+    "rag_context": "Use this API context:\nAPI docs context\n\n"
+  }
+}

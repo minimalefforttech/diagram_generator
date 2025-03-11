@@ -1,0 +1,40 @@
+{
+  "id": "134a65e6-0b16-4851-9f5a-2b4f10eb35c7",
+  "diagram_id": "38bf6a32-05f4-49fa-9577-b6a3a9710336",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Create a simple flowchart",
+      "timestamp": "2025-03-11 14:12:25.892638",
+      "metadata": {
+        "type": "initial_request"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "graph TD;\nA[Start] -> B[End];",
+      "timestamp": "2025-03-11 14:12:25.892638",
+      "metadata": {
+        "type": "generation",
+        "diagram_type": "mermaid"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "graph TD;\nA[Start] --> B[End];",
+      "timestamp": "2025-03-11 14:12:25.907942",
+      "metadata": {
+        "type": "fix",
+        "iteration": 1,
+        "errors": [
+          "Invalid arrow syntax, use --> instead of ->"
+        ]
+      }
+    }
+  ],
+  "created_at": "2025-03-11 14:12:25.892638",
+  "updated_at": "2025-03-11 14:12:25.907942",
+  "metadata": {
+    "rag_context": null
+  }
+}

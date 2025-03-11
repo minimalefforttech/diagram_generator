@@ -1,0 +1,13 @@
+{
+  "id": "0495c66b-175e-4512-bdb8-c114348b7b60",
+  "description": "Create a simple flowchart with three nodes",
+  "diagram_type": "mermaid",
+  "code": "Here is the minimal diagram:\n\n\ngraph TD;\nA-->B;\nB-->C;\n\n\nThis will create a simple flowchart with three nodes (A, B, and C) connected by arrows.",
+  "created_at": "2025-03-11 14:38:25.752042",
+  "tags": "set()",
+  "metadata": {
+    "agent_enabled": true,
+    "rag_enabled": false,
+    "model": null
+  }
+}

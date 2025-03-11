@@ -1,0 +1,28 @@
+{
+  "id": "9029d537-691b-4ea0-ab31-e21b2f85b6ee",
+  "diagram_id": "a01b4753-b874-4415-85fd-8f045e857a5e",
+  "messages": [
+    {
+      "role": "user",
+      "content": "test diagram",
+      "timestamp": "2025-03-11 14:27:07.938550",
+      "metadata": {
+        "type": "initial_request"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "graph TD;\nSystem-->Database;\nDatabase-->API;\nAPI-->User;",
+      "timestamp": "2025-03-11 14:27:07.938550",
+      "metadata": {
+        "type": "generation",
+        "diagram_type": "mermaid"
+      }
+    }
+  ],
+  "created_at": "2025-03-11 14:27:07.938550",
+  "updated_at": "2025-03-11 14:27:07.938550",
+  "metadata": {
+    "rag_context": null
+  }
+}

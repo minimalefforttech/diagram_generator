@@ -1,0 +1,13 @@
+{
+  "id": "6999289e-c16b-4238-a244-51568d3275c3",
+  "description": "test diagram",
+  "diagram_type": "mermaid",
+  "code": "Here is a minimal diagram:\n\n\ngraph TD;\nA-->B;\nC-->D;\n\n\nDescription: Simple flowchart example.",
+  "created_at": "2025-03-11 14:36:26.696406",
+  "tags": "set()",
+  "metadata": {
+    "agent_enabled": false,
+    "rag_enabled": false,
+    "model": "llama3.1:8b"
+  }
+}

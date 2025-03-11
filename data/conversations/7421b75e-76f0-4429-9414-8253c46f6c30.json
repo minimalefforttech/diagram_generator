@@ -1,0 +1,28 @@
+{
+  "id": "7421b75e-76f0-4429-9414-8253c46f6c30",
+  "diagram_id": "6999289e-c16b-4238-a244-51568d3275c3",
+  "messages": [
+    {
+      "role": "user",
+      "content": "test diagram",
+      "timestamp": "2025-03-11 14:36:26.696406",
+      "metadata": {
+        "type": "initial_request"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "Here is a minimal diagram:\n\n\ngraph TD;\nA-->B;\nC-->D;\n\n\nDescription: Simple flowchart example.",
+      "timestamp": "2025-03-11 14:36:26.696406",
+      "metadata": {
+        "type": "generation",
+        "diagram_type": "mermaid"
+      }
+    }
+  ],
+  "created_at": "2025-03-11 14:36:26.696406",
+  "updated_at": "2025-03-11 14:36:26.696406",
+  "metadata": {
+    "rag_context": null
+  }
+}

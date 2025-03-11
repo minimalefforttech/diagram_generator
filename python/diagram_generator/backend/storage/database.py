@@ -1,0 +1,311 @@
+"""Database storage for diagrams and conversation history."""
+
+import json
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional, Set, Tuple, Any
+
+from pydantic import BaseModel
+
+class DiagramRecord(BaseModel):
+    """Record of a generated diagram."""
+    id: str
+    description: str
+    diagram_type: str
+    code: str
+    created_at: datetime
+    tags: Set[str] = set()
+    metadata: Dict[str, Any] = {}
+
+class ConversationMessage(BaseModel):
+    """Message in a conversation."""
+    role: str  # 'user' or 'assistant'
+    content: str
+    timestamp: datetime
+    metadata: Dict[str, Any] = {}
+
+class ConversationRecord(BaseModel):
+    """Record of a diagram generation conversation."""
+    id: str
+    diagram_id: str
+    messages: List[ConversationMessage]
+    created_at: datetime
+    updated_at: datetime
+    metadata: Dict[str, Any] = {}
+
+class StorageError(Exception):
+    """Base class for storage-related errors."""
+    pass
+
+class StorageConfig(BaseModel):
+    """Configuration for storage layer."""
+    data_dir: str = "data"
+    diagrams_dir: str = "diagrams"
+    conversations_dir: str = "conversations"
+    user_preferences_dir: str = "user_preferences"
+    index_file: str = "index.json"
+
+class Storage:
+    """Storage layer for diagrams and conversations."""
+
+    def __init__(self, config: StorageConfig = StorageConfig()):
+        """Initialize storage.
+        
+        Args:
+            config: Storage configuration
+        """
+        self.config = config
+        self.base_path = Path(config.data_dir)
+        self.diagrams_path = self.base_path / config.diagrams_dir
+        self.conversations_path = self.base_path / config.conversations_dir
+        self.user_preferences_path = self.base_path / config.user_preferences_dir
+        self.index_path = self.base_path / config.index_file
+
+        # Create directory structure
+        self.diagrams_path.mkdir(parents=True, exist_ok=True)
+        self.conversations_path.mkdir(parents=True, exist_ok=True)
+        self.user_preferences_path.mkdir(parents=True, exist_ok=True)
+
+        # Load or create index
+        self.index = self._load_index()
+        
+    def _load_index(self) -> Dict[str, Dict[str, Any]]:
+        """Load storage index from disk.
+        
+        Returns:
+            dict: Storage index
+        """
+        if self.index_path.exists():
+            try:
+                return json.loads(self.index_path.read_text())
+            except json.JSONDecodeError:
+                return {"diagrams": {}, "conversations": {}}
+        return {"diagrams": {}, "conversations": {}}
+        
+    def _save_index(self) -> None:
+        """Save storage index to disk."""
+        self.index_path.write_text(json.dumps(self.index, indent=2))
+        
+    def save_diagram(self, diagram: DiagramRecord) -> None:
+        """Save a diagram record.
+        
+        Args:
+            diagram: Diagram record to save
+        """
+        # Save diagram data
+        diagram_path = self.diagrams_path / f"{diagram.id}.json"
+        diagram_path.write_text(json.dumps(diagram.model_dump(), indent=2, default=str))
+        
+        # Update index
+        self.index["diagrams"][diagram.id] = {
+            "type": diagram.diagram_type,
+            "tags": list(diagram.tags),
+            "created_at": diagram.created_at.isoformat()
+        }
+        self._save_index()
+        
+    def get_diagram(self, diagram_id: str) -> Optional[DiagramRecord]:
+        """Retrieve a diagram record.
+        
+        Args:
+            diagram_id: ID of diagram to retrieve
+            
+        Returns:
+            DiagramRecord or None: Retrieved diagram record
+        """
+        diagram_path = self.diagrams_path / f"{diagram_id}.json"
+        
+        if not diagram_path.exists():
+            return None
+            
+        try:
+            data = json.loads(diagram_path.read_text())
+            return DiagramRecord.model_validate(data)
+        except Exception as e:
+            raise StorageError(f"Failed to load diagram {diagram_id}: {e}")
+            
+    def save_conversation(self, conversation: ConversationRecord) -> None:
+        """Save a conversation record.
+        
+        Args:
+            conversation: Conversation record to save
+        """
+        # Save conversation data
+        conv_path = self.conversations_path / f"{conversation.id}.json"
+        conv_path.write_text(json.dumps(conversation.model_dump(), indent=2, default=str))
+        
+        # Update index
+        self.index["conversations"][conversation.id] = {
+            "diagram_id": conversation.diagram_id,
+            "created_at": conversation.created_at.isoformat(),
+            "updated_at": conversation.updated_at.isoformat()
+        }
+        self._save_index()
+        
+    def get_conversation(self, conversation_id: str) -> Optional[ConversationRecord]:
+        """Retrieve a conversation record.
+        
+        Args:
+            conversation_id: ID of conversation to retrieve
+            
+        Returns:
+            ConversationRecord or None: Retrieved conversation record
+        """
+        conv_path = self.conversations_path / f"{conversation_id}.json"
+        
+        if not conv_path.exists():
+            return None
+            
+        try:
+            data = json.loads(conv_path.read_text())
+            return ConversationRecord.model_validate(data)
+        except Exception as e:
+            raise StorageError(f"Failed to load conversation {conversation_id}: {e}")
+            
+    def delete_diagram(self, diagram_id: str) -> bool:
+        """Delete a diagram record.
+        
+        Args:
+            diagram_id: ID of diagram to delete
+            
+        Returns:
+            bool: Whether deletion was successful
+        """
+        diagram_path = self.diagrams_path / f"{diagram_id}.json"
+        
+        try:
+            diagram_path.unlink(missing_ok=True)
+            self.index["diagrams"].pop(diagram_id, None)
+            self._save_index()
+            return True
+        except Exception:
+            return False
+            
+    def delete_conversation(self, conversation_id: str) -> bool:
+        """Delete a conversation record.
+        
+        Args:
+            conversation_id: ID of conversation to delete
+            
+        Returns:
+            bool: Whether deletion was successful
+        """
+        conv_path = self.conversations_path / f"{conversation_id}.json"
+        
+        try:
+            conv_path.unlink(missing_ok=True)
+            self.index["conversations"].pop(conversation_id, None)
+            self._save_index()
+            return True
+        except Exception:
+            return False
+            
+    def search_diagrams(
+        self,
+        diagram_type: Optional[str] = None,
+        tags: Optional[Set[str]] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None
+    ) -> List[str]:
+        """Search for diagram IDs matching criteria.
+        
+        Args:
+            diagram_type: Filter by diagram type
+            tags: Filter by tags (all must match)
+            start_date: Filter by creation date (inclusive)
+            end_date: Filter by creation date (inclusive)
+            
+        Returns:
+            List[str]: Matching diagram IDs
+        """
+        results = []
+        
+        for diagram_id, info in self.index["diagrams"].items():
+            if diagram_type and info["type"] != diagram_type:
+                continue
+                
+            if tags and not tags.issubset(set(info["tags"])):
+                continue
+                
+            created_at = datetime.fromisoformat(info["created_at"])
+            
+            if start_date and created_at < start_date:
+                continue
+                
+            if end_date and created_at > end_date:
+                continue
+                
+            results.append(diagram_id)
+            
+        return results
+        
+    def get_diagram_history(self, diagram_id: str) -> List[str]:
+        """Get conversation IDs associated with a diagram.
+        
+        Args:
+            diagram_id: Diagram ID to get history for
+            
+        Returns:
+            List[str]: Associated conversation IDs
+        """
+        return [
+            conv_id for conv_id, info in self.index["conversations"].items()
+            if info["diagram_id"] == diagram_id
+        ]
+
+    def list_conversations(self, diagram_id: str) -> List[ConversationRecord]:
+        """List all conversations for a diagram.
+        
+        Args:
+            diagram_id: Diagram ID to list conversations for
+            
+        Returns:
+            List[ConversationRecord]: List of conversations
+        """
+        conversations = []
+        for conv_id, info in self.index["conversations"].items():
+            if info["diagram_id"] == diagram_id:
+                conv = self.get_conversation(conv_id)
+                if conv:
+                    conversations.append(conv)
+        return conversations
+
+    def update_conversation(self, conversation: ConversationRecord) -> None:
+        """Update an existing conversation record.
+        
+        Args:
+            conversation: Updated conversation record
+        """
+        # Just use save_conversation since it handles both create and update
+        self.save_conversation(conversation)
+
+    def save_preferences(self, user_id: str, preferences: Dict[str, Any]) -> None:
+        """Save user preferences.
+
+        Args:
+            user_id: ID of user
+            preferences: User preferences to save
+        """
+        # Save preferences data
+        pref_path = self.user_preferences_path / f"{user_id}.json"
+        pref_path.write_text(json.dumps(preferences, indent=2, default=str))
+
+    def get_preferences(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve user preferences.
+
+        Args:
+            user_id: ID of user
+
+        Returns:
+            Dict[str, Any] or None: Retrieved user preferences
+        """
+        pref_path = self.user_preferences_path / f"{user_id}.json"
+
+        if not pref_path.exists():
+            return None
+
+        try:
+            data = json.loads(pref_path.read_text())
+            return data
+        except Exception as e:
+            raise StorageError(f"Failed to load preferences for user {user_id}: {e}")

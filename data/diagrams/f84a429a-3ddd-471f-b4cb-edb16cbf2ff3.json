@@ -1,0 +1,13 @@
+{
+  "id": "f84a429a-3ddd-471f-b4cb-edb16cbf2ff3",
+  "description": "test diagram",
+  "diagram_type": "mermaid",
+  "code": "```mermaid\ngraph LR;\n    A[Start] --> B{Is it a good day?};\n    B -- Yes --> C[Go for a walk];\n    B -- No --> D[Stay inside];\n    C --> E[Feel happy];\n    D --> F[Watch TV];\n```",
+  "created_at": "2025-03-11 12:28:45.523096",
+  "tags": "set()",
+  "metadata": {
+    "agent_enabled": false,
+    "rag_enabled": true,
+    "model": "llama3.1:8b"
+  }
+}

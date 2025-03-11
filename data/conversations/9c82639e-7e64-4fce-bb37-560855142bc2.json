@@ -1,0 +1,28 @@
+{
+  "id": "9c82639e-7e64-4fce-bb37-560855142bc2",
+  "diagram_id": "2ec9f2a9-411c-458c-8896-318302f7bf97",
+  "messages": [
+    {
+      "role": "user",
+      "content": "test_0",
+      "timestamp": "2025-03-11 13:23:50.256707",
+      "metadata": {
+        "type": "initial_request"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "```mermaid\ngraph LR;\n    A[Start] --> B{Test 1};\n    B -->|Yes| C[Pass];\n    B -->|No| D[Fail];\n    C --> E[End];\n    D --> F[Rerun];\n```",
+      "timestamp": "2025-03-11 13:23:50.256707",
+      "metadata": {
+        "type": "generation",
+        "diagram_type": "mermaid"
+      }
+    }
+  ],
+  "created_at": "2025-03-11 13:23:50.256707",
+  "updated_at": "2025-03-11 13:23:50.256707",
+  "metadata": {
+    "rag_context": null
+  }
+}

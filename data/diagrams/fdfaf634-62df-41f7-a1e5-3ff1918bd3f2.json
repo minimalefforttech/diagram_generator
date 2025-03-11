@@ -1,0 +1,13 @@
+{
+  "id": "fdfaf634-62df-41f7-a1e5-3ff1918bd3f2",
+  "description": "Create an API diagram",
+  "diagram_type": "mermaid",
+  "code": "graph TD;\nA[API] --> B[Database];",
+  "created_at": "2025-03-11 13:06:21.423139",
+  "tags": "set()",
+  "metadata": {
+    "agent_enabled": false,
+    "rag_enabled": true,
+    "model": "llama3.1:8b"
+  }
+}

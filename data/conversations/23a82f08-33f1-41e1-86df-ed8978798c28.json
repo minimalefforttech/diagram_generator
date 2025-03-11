@@ -1,0 +1,28 @@
+{
+  "id": "23a82f08-33f1-41e1-86df-ed8978798c28",
+  "diagram_id": "7a0a2cfe-4f80-4b81-933b-81399cc8c74a",
+  "messages": [
+    {
+      "role": "user",
+      "content": "test diagram",
+      "timestamp": "2025-03-11 13:18:45.316628",
+      "metadata": {
+        "type": "initial_request"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "```mermaid\ngraph LR;\n    A[User] -->|login|> B[Authentication Service];\n    B -->|validate|> C[Database];\n    C -->|check|> D[User Account];\n    D -->|return|> E[API Gateway];\n    E -->|authenticate|> F[Protected Resource];\n```",
+      "timestamp": "2025-03-11 13:18:45.316628",
+      "metadata": {
+        "type": "generation",
+        "diagram_type": "mermaid"
+      }
+    }
+  ],
+  "created_at": "2025-03-11 13:18:45.316628",
+  "updated_at": "2025-03-11 13:18:45.316628",
+  "metadata": {
+    "rag_context": "Use the following API documentation context to assist with the diagram creation:\nAPI docs context\n\n"
+  }
+}

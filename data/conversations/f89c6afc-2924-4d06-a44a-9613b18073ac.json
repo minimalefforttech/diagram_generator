@@ -1,0 +1,28 @@
+{
+  "id": "f89c6afc-2924-4d06-a44a-9613b18073ac",
+  "diagram_id": "c4647429-9e83-4303-8ddf-134472c17018",
+  "messages": [
+    {
+      "role": "user",
+      "content": "test",
+      "timestamp": "2025-03-11 12:38:46.979792",
+      "metadata": {
+        "type": "initial_request"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "```mermaid\ngraph LR;\n    A[Start] --> B{Test};\n    B -->|Yes| C[Success];\n    B -->|No| D[Failure];\n```",
+      "timestamp": "2025-03-11 12:38:46.979792",
+      "metadata": {
+        "type": "generation",
+        "diagram_type": "mermaid"
+      }
+    }
+  ],
+  "created_at": "2025-03-11 12:38:46.979792",
+  "updated_at": "2025-03-11 12:38:46.979792",
+  "metadata": {
+    "rag_context": null
+  }
+}

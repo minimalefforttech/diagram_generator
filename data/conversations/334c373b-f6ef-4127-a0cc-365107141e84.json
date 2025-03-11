@@ -1,0 +1,28 @@
+{
+  "id": "334c373b-f6ef-4127-a0cc-365107141e84",
+  "diagram_id": "fa2543c8-4c6a-4ed1-aeee-233c3acb12e2",
+  "messages": [
+    {
+      "role": "user",
+      "content": "test diagram",
+      "timestamp": "2025-03-11 13:06:20.103244",
+      "metadata": {
+        "type": "initial_request"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "```mermaid\ngraph LR;\n    A[Start] --> B{Decision};\n    B -- Yes --> C[Do this];\n    B -- No --> D[Do that];\n    C --> E[End];\n    D --> F[End];\n```",
+      "timestamp": "2025-03-11 13:06:20.103244",
+      "metadata": {
+        "type": "generation",
+        "diagram_type": "mermaid"
+      }
+    }
+  ],
+  "created_at": "2025-03-11 13:06:20.103244",
+  "updated_at": "2025-03-11 13:06:20.103244",
+  "metadata": {
+    "rag_context": null
+  }
+}

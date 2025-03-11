@@ -1,0 +1,13 @@
+{
+  "id": "ba1997b1-e6b1-4561-822c-4a5191ef755c",
+  "description": "test diagram",
+  "diagram_type": "mermaid",
+  "code": "```mermaid\ngraph LR;\n    A[User] -->|clicks button|> B[API Endpoint]\n    B -->|calls backend service|> C[Database]\n    C -->|returns data|> D[Frontend]\n    D -->|renders UI|> E[Browser]\n```",
+  "created_at": "2025-03-11 12:33:22.696321",
+  "tags": "set()",
+  "metadata": {
+    "agent_enabled": false,
+    "rag_enabled": true,
+    "model": "llama3.1:8b"
+  }
+}

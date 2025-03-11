@@ -1,0 +1,28 @@
+{
+  "id": "e122d1c8-0a6f-4fbf-b7d8-db8ae08a966c",
+  "diagram_id": "d26dea3b-23c1-429c-9008-92b9f9ccfc3d",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Create a simple flowchart",
+      "timestamp": "2025-03-11 14:41:55.120999",
+      "metadata": {
+        "type": "initial_request"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "graph TD;\nA[Start] --> B[End];",
+      "timestamp": "2025-03-11 14:41:55.120999",
+      "metadata": {
+        "type": "generation",
+        "diagram_type": "mermaid"
+      }
+    }
+  ],
+  "created_at": "2025-03-11 14:41:55.120999",
+  "updated_at": "2025-03-11 14:41:55.120999",
+  "metadata": {
+    "rag_context": null
+  }
+}

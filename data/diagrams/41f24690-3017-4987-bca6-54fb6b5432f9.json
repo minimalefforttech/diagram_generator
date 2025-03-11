@@ -1,0 +1,13 @@
+{
+  "id": "41f24690-3017-4987-bca6-54fb6b5432f9",
+  "description": "test_0",
+  "diagram_type": "mermaid",
+  "code": "```mermaid\ngraph LR;\n    A[Start] --> B{Test 0};\n    B -->|Yes| C[Pass];\n    B -->|No| D[Fail];\n```",
+  "created_at": "2025-03-11 13:18:13.426847",
+  "tags": "set()",
+  "metadata": {
+    "agent_enabled": false,
+    "rag_enabled": false,
+    "model": "llama3.1:8b"
+  }
+}

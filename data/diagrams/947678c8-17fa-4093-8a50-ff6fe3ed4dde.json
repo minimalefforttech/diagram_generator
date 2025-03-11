@@ -1,0 +1,13 @@
+{
+  "id": "947678c8-17fa-4093-8a50-ff6fe3ed4dde",
+  "description": "Create a simple flowchart",
+  "diagram_type": "mermaid",
+  "code": "graph TD;\nA[Start] --> B[End];",
+  "created_at": "2025-03-11 13:18:16.921938",
+  "tags": "set()",
+  "metadata": {
+    "agent_enabled": false,
+    "rag_enabled": false,
+    "model": "llama3.1:8b"
+  }
+}

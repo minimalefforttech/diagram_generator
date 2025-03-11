@@ -1,0 +1,13 @@
+{
+  "id": "c8b00137-aa65-4e04-9c24-3631b2f6344b",
+  "description": "test diagram",
+  "diagram_type": "mermaid",
+  "code": "```mermaid\ngraph LR;\n    A[User] -->|login|> B[Auth Service]\n    B -->|validate|> C[Database]\n    C -->|return user data|> D[User Profile Page]\n    E[Admin] -->|login|> F[Auth Service]\n    F -->|validate|> G[Database]\n    G -->|return admin data|> H[Admin Dashboard]\n```",
+  "created_at": "2025-03-11 12:33:20.550894",
+  "tags": "set()",
+  "metadata": {
+    "agent_enabled": false,
+    "rag_enabled": true,
+    "model": "llama3.1:8b"
+  }
+}

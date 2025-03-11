@@ -1,0 +1,13 @@
+{
+  "id": "a01b4753-b874-4415-85fd-8f045e857a5e",
+  "description": "test diagram",
+  "diagram_type": "mermaid",
+  "code": "graph TD;\nSystem-->Database;\nDatabase-->API;\nAPI-->User;",
+  "created_at": "2025-03-11 14:27:07.938550",
+  "tags": "set()",
+  "metadata": {
+    "agent_enabled": false,
+    "rag_enabled": false,
+    "model": "llama3.1:8b"
+  }
+}

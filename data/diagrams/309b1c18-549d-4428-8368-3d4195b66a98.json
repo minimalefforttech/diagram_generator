@@ -1,0 +1,13 @@
+{
+  "id": "309b1c18-549d-4428-8368-3d4195b66a98",
+  "description": "test diagram",
+  "diagram_type": "mermaid",
+  "code": "```mermaid\ngraph LR;\n    A[Start] --> B(Decision);\n    B -->|Yes| C[Do Task];\n    B -->|No| D[Skip Task];\n    C --> E[End];\n    D --> F[Repeat];\n```",
+  "created_at": "2025-03-11 13:59:46.464865",
+  "tags": "set()",
+  "metadata": {
+    "agent_enabled": true,
+    "rag_enabled": false,
+    "model": null
+  }
+}

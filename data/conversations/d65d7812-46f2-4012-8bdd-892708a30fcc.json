@@ -1,0 +1,68 @@
+{
+  "id": "d65d7812-46f2-4012-8bdd-892708a30fcc",
+  "diagram_id": "29ec2365-da86-4148-9bb8-cd69651e665d",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Create a simple flowchart with three nodes",
+      "timestamp": "2025-03-11 13:18:22.109514",
+      "metadata": {
+        "type": "initial_request"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "```mermaid\ngraph LR;\n    A[Start] --> B{Is it true?};\n    B -->|Yes| C[Do something];\n    B -->|No| D[Do nothing];\n```",
+      "timestamp": "2025-03-11 13:18:22.109514",
+      "metadata": {
+        "type": "generation",
+        "diagram_type": "mermaid"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "```mermaid\ngraph LR;\n    A[Start] --> B{Is it true?};\n    B --> Yes --> C[Do something];\n    B --> No --> D[Do nothing];\n```",
+      "timestamp": "2025-03-11 13:18:25.693262",
+      "metadata": {
+        "type": "fix",
+        "iteration": 1,
+        "errors": [
+          "Invalid character '}' at position 21",
+          "Missing '}' at end of graph"
+        ]
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "```mermaid\ngraph LR;\n    A[Start] --> B{Is it true?};\n    B --> C(id=\"Yes\") --> C1[Do something];\n    B --> D(id=\"No\") --> D1[Do nothing];\n```",
+      "timestamp": "2025-03-11 13:18:29.869902",
+      "metadata": {
+        "type": "fix",
+        "iteration": 2,
+        "errors": [
+          "Missing 'id' attribute for node 'Yes'",
+          "Missing 'id' attribute for node 'No'",
+          "Invalid edge between nodes 'B' and 'C'"
+        ]
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "```mermaid\ngraph LR;\n    A[Start] --> B{Is it true?};\n    B --> C(id:\"Yes\") --> C1[Do something];\n    B --> D(id:\"No\") --> D1[Do nothing];\n```",
+      "timestamp": "2025-03-11 13:18:33.888556",
+      "metadata": {
+        "type": "fix",
+        "iteration": 3,
+        "errors": [
+          "Missing colon after 'id' attribute in node 'C'",
+          "Missing colon after 'id' attribute in node 'D'"
+        ]
+      }
+    }
+  ],
+  "created_at": "2025-03-11 13:18:22.109514",
+  "updated_at": "2025-03-11 13:18:33.888556",
+  "metadata": {
+    "rag_context": null
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "id": "206c69e6-3533-4617-9da6-0ab10e4e77a0",
+  "diagram_id": "f84a429a-3ddd-471f-b4cb-edb16cbf2ff3",
+  "messages": [
+    {
+      "role": "user",
+      "content": "test diagram",
+      "timestamp": "2025-03-11 12:28:45.523096",
+      "metadata": {
+        "type": "initial_request"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "```mermaid\ngraph LR;\n    A[Start] --> B{Is it a good day?};\n    B -- Yes --> C[Go for a walk];\n    B -- No --> D[Stay inside];\n    C --> E[Feel happy];\n    D --> F[Watch TV];\n```",
+      "timestamp": "2025-03-11 12:28:45.523096",
+      "metadata": {
+        "type": "generation",
+        "diagram_type": "mermaid"
+      }
+    }
+  ],
+  "created_at": "2025-03-11 12:28:45.523096",
+  "updated_at": "2025-03-11 12:28:45.523096",
+  "metadata": {
+    "rag_context": "Use the following API documentation context to assist with the diagram creation:\ncontext1\n\n"
+  }
+}

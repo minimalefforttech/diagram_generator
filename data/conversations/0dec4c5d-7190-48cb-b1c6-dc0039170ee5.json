@@ -1,0 +1,28 @@
+{
+  "id": "0dec4c5d-7190-48cb-b1c6-dc0039170ee5",
+  "diagram_id": "67e981a1-bbf6-45e2-88ec-67f188cf8f94",
+  "messages": [
+    {
+      "role": "user",
+      "content": "test_0",
+      "timestamp": "2025-03-11 14:22:59.449960",
+      "metadata": {
+        "type": "initial_request"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "graph TD;\n    A[Start] --> B{Decision}\n    B -- Yes --> C[Action 1]\n    B -- No --> D[Action 2]\n    C --> E[End]\n    D --> F[End]",
+      "timestamp": "2025-03-11 14:22:59.449960",
+      "metadata": {
+        "type": "generation",
+        "diagram_type": "mermaid"
+      }
+    }
+  ],
+  "created_at": "2025-03-11 14:22:59.449960",
+  "updated_at": "2025-03-11 14:22:59.449960",
+  "metadata": {
+    "rag_context": null
+  }
+}

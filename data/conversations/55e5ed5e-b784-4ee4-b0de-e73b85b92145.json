@@ -1,0 +1,28 @@
+{
+  "id": "55e5ed5e-b784-4ee4-b0de-e73b85b92145",
+  "diagram_id": "4c2f8954-7545-4811-b2e2-956381014837",
+  "messages": [
+    {
+      "role": "user",
+      "content": "test diagram",
+      "timestamp": "2025-03-11 14:36:30.583999",
+      "metadata": {
+        "type": "initial_request"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "Here is a minimal diagram:\n\n\ngraph TD;\nA-->B;\nC-->D;\n\n\nDescription: Simple flow between A and B, and C and D.",
+      "timestamp": "2025-03-11 14:36:30.583999",
+      "metadata": {
+        "type": "generation",
+        "diagram_type": "mermaid"
+      }
+    }
+  ],
+  "created_at": "2025-03-11 14:36:30.583999",
+  "updated_at": "2025-03-11 14:36:30.583999",
+  "metadata": {
+    "rag_context": null
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "id": "725693bb-b1d9-4786-82e6-a8c9559b2956",
+  "diagram_id": "0aaf8755-0e65-499a-b7cc-e7af12f2f12f",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Create a simple flowchart with three nodes",
+      "timestamp": "2025-03-11 13:06:26.661854",
+      "metadata": {
+        "type": "initial_request"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "```mermaid\ngraph LR;\n    A[Start] --> B{Is it raining?};\n    B -- Yes --> C[Rainy Day];\n    B -- No --> D[Sunny Day];\n```",
+      "timestamp": "2025-03-11 13:06:26.661854",
+      "metadata": {
+        "type": "generation",
+        "diagram_type": "mermaid"
+      }
+    }
+  ],
+  "created_at": "2025-03-11 13:06:26.661854",
+  "updated_at": "2025-03-11 13:06:26.661854",
+  "metadata": {
+    "rag_context": null
+  }
+}
