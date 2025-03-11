@@ -1,6 +1,6 @@
 # Diagram Generator
 
-A tool for generating diagrams using LLM, with a Python backend API and web frontend.
+A tool for generating diagrams using LLM, with a Python backend API and React frontend.
 
 ## Project Structure
 
@@ -13,7 +13,7 @@ diagram_generator/
 │       └── ...
 ├── docs/                    # Documentation
 ├── tests/                   # Test suite
-└── web/                     # Web frontend (to be added later)
+└── frontend/                # React frontend
 ```
 
 ## Installation
@@ -44,9 +44,67 @@ diagram_generator/
 
 ## Running the Application
 
-### Backend API
+### Quick Start (Recommended)
 
-Run the backend API server:
+Run both the backend and frontend with a single command:
+
+#### Using the CLI (After Installation)
+```bash
+# If you've installed the package
+diagram-generator
+```
+
+#### Using Scripts (Development)
+
+##### Windows
+```powershell
+# From the project root
+.\scripts\run-app.ps1
+```
+
+##### macOS/Linux
+```bash
+# From the project root
+chmod +x scripts/run-app.sh  # Make the script executable (first time only)
+./scripts/run-app.sh
+```
+
+This will:
+1. Create a Python virtual environment if it doesn't exist
+2. Install the backend in development mode
+3. Install frontend dependencies if needed
+4. Start both the backend and frontend servers
+5. Show combined logs from both servers
+
+The application will be available at:
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:8000
+
+Press Ctrl+C to stop both servers.
+
+The CLI provides additional options:
+```bash
+# Show help
+diagram-generator --help
+
+# Start only the backend
+diagram-generator --backend-only
+
+# Start only the frontend
+diagram-generator --frontend-only
+
+# Don't open browser automatically
+diagram-generator --no-browser
+
+# Use custom ports
+diagram-generator --backend-port 8080 --frontend-port 3000
+```
+
+### Running Servers Separately
+
+If you prefer to run the servers separately:
+
+#### Backend API
 
 ```bash
 # Using the console script
@@ -56,7 +114,13 @@ diagram-generator-backend
 python -m uvicorn diagram_generator.backend.main:app --reload
 ```
 
-The API will be available at http://localhost:8000
+#### Frontend
+
+```bash
+cd frontend
+npm install  # First time only
+npm run dev
+```
 
 ### API Documentation
 
@@ -82,4 +146,4 @@ pytest tests/test_main.py
 - **Backend API**: FastAPI application in `python/diagram_generator/backend/`
 - **Documentation**: Project docs in `docs/`
 - **Tests**: Test suite in `tests/`
-- **Web Frontend**: (Coming soon) React application in `web/`
+- **Web Frontend**: React application with Material UI in `frontend/`

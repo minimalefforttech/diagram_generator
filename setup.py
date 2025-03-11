@@ -38,6 +38,7 @@ setup(
     entry_points={
         "console_scripts": [
             "diagram-generator-backend=diagram_generator.backend.main:run_server",
+            "diagram-generator=diagram_generator.cli:main",
         ],
     },
 )
