@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
-import { Box, Typography, IconButton, Tooltip } from '@mui/material';
+import { Box, Typography, IconButton, Tooltip, useTheme } from '@mui/material';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import ErrorIcon from '@mui/icons-material/Error';
-import { green, red } from '@mui/material/colors';
+import CheckIcon from '@mui/icons-material/Check';
 
 interface ErrorToastProps {
   message: string;
@@ -12,16 +10,16 @@ interface ErrorToastProps {
 
 export const ErrorToast: React.FC<ErrorToastProps> = ({ message, details }) => {
   const [copied, setCopied] = useState(false);
-  const hasDetails = details && Object.keys(details).length > 0;
-
+  const theme = useTheme();
+  
   const handleCopyError = () => {
-    if (!hasDetails) return;
-    
     const errorText = JSON.stringify({ message, details }, null, 2);
-    navigator.clipboard.writeText(errorText).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
+    navigator.clipboard.writeText(errorText)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      })
+      .catch(err => console.error('Failed to copy error details:', err));
   };
 
   return (
@@ -30,50 +28,27 @@ export const ErrorToast: React.FC<ErrorToastProps> = ({ message, details }) => {
         display: 'flex', 
         alignItems: 'flex-start',
         gap: 1,
-        cursor: hasDetails ? 'pointer' : 'default',
-        '&:hover': hasDetails ? {
-          '& .copy-button': {
-            opacity: 1
-          }
-        } : {}
       }}
-      onClick={handleCopyError}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1 }}>
-        <ErrorIcon sx={{ color: red[500], fontSize: 20 }} />
-        <Typography>{message}</Typography>
-      </Box>
-      {hasDetails && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 'auto' }}>
-          {copied ? (
-            <Typography 
-              variant="caption" 
-              sx={{ 
-                color: green[500],
-                display: 'flex',
-                alignItems: 'center',
-                gap: 0.5
-              }}
-            >
-              <CheckCircleIcon fontSize="small" />
-              Copied
-            </Typography>
-          ) : (
-            <Tooltip title="Copy error details">
-              <IconButton 
-                size="small" 
-                className="copy-button"
-                sx={{ 
-                  opacity: 0,
-                  transition: 'opacity 0.2s'
-                }}
-              >
-                <ContentCopyIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          )}
-        </Box>
-      )}
+      <Typography sx={{ flex: 1 }}>{message}</Typography>
+      <Tooltip title={copied ? "Copied!" : "Copy error details"}>
+        <IconButton 
+          size="small" 
+          onClick={handleCopyError}
+          sx={{ 
+            color: copied 
+              ? 'success.main' 
+              : theme.palette.mode === 'dark' 
+                ? 'primary.light' 
+                : 'primary.main',
+            transition: 'all 0.2s',
+            mt: -0.5,
+            mr: -0.5
+          }}
+        >
+          {copied ? <CheckIcon fontSize="small" /> : <ContentCopyIcon fontSize="small" />}
+        </IconButton>
+      </Tooltip>
     </Box>
   );
 };

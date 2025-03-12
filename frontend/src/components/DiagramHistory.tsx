@@ -8,14 +8,12 @@ import {
   ListItemButton,
   ListItemText,
   IconButton,
-  Divider,
   Tooltip,
   CircularProgress,
   Alert,
   Collapse
 } from '@mui/material';
 import HistoryIcon from '@mui/icons-material/History';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { diagramService } from '../services/api';
@@ -72,23 +70,23 @@ const DiagramHistory: React.FC<DiagramHistoryProps> = ({ onSelectDiagram, curren
   };
 
   return (
-    <Paper 
-      sx={{ 
-        width: '100%',
+    <Paper sx={{ 
+      flexBasis: 200, 
+      flexShrink: 0,
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden'
+    }}>
+      <Box sx={{ 
+        p: 1.5,
         display: 'flex', 
-        flexDirection: 'column',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        borderBottom: 1,
+        borderColor: 'divider',
+        cursor: 'pointer'
       }}
-    >
-      <Box 
-        sx={{ 
-          p: 1.5,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          cursor: 'pointer',
-        }}
-        onClick={toggleExpanded}
-      >
+      onClick={toggleExpanded}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <HistoryIcon />
           <Typography variant="subtitle1">Diagram History</Typography>
@@ -106,9 +104,16 @@ const DiagramHistory: React.FC<DiagramHistoryProps> = ({ onSelectDiagram, curren
       </Box>
       
       <Collapse in={expanded}>
-        <Divider />
-        
-        <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
+        <Box sx={{ maxHeight: 300, overflow: 'auto',
+            scrollbarWidth: 'thin',
+            '&::-webkit-scrollbar': {
+              width: '8px',
+            },
+            '&::-webkit-scrollbar-thumb': {
+              backgroundColor: 'rgba(255, 255, 255, 0.2)',
+              borderRadius: '4px',
+            }
+        }}>
           {loading ? (
             <Box sx={{ p: 2, display: 'flex', justifyContent: 'center' }}>
               <CircularProgress size={24} />
@@ -140,14 +145,7 @@ const DiagramHistory: React.FC<DiagramHistoryProps> = ({ onSelectDiagram, curren
                     onClick={() => onSelectDiagram(item.id)}
                   >
                     <ListItemText 
-                      primary={
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <Typography variant="body2" noWrap>
-                            {item.description.substring(0, 50)}
-                            {item.description.length > 50 ? '...' : ''}
-                          </Typography>
-                        </Box>
-                      }
+                      primary={item.description}
                       secondary={
                         <Box sx={{ display: 'flex', gap: 1 }}>
                           <Typography variant="caption" color="primary">

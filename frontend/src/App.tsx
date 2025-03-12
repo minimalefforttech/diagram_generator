@@ -8,6 +8,7 @@ import { ToastContainer, toast } from 'react-toastify';
 import { ErrorToast } from './components/ErrorToast';
 import 'react-toastify/dist/ReactToastify.css';
 import ConfigurationScreen from './components/ConfigurationScreen';
+import { ThemeProvider } from './contexts/ThemeContext';
 
 const App: React.FC = () => {
   const [diagram, setDiagram] = useState<DiagramState>({
@@ -16,7 +17,6 @@ const App: React.FC = () => {
   const [currentScreen, setCurrentScreen] = useState<'configuration' | 'workspace'>('configuration');
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [agentIterations, setAgentIterations] = useState(0);
-  const [currentSyntax, setCurrentSyntax] = useState<string>('mermaid');
   const [currentType, setCurrentType] = useState<string>('auto');
   const queryClient = new QueryClient();
 
@@ -42,20 +42,24 @@ const App: React.FC = () => {
       code: undefined
     });
     
-    setCurrentSyntax(syntax);
     setCurrentType(diagramType || 'auto');
 
     try {
+      // First switch to workspace screen - this allows the diagram component to be mounted
+      // before we try to render the diagram
+      setCurrentScreen('workspace');
+      
       const response = await diagramService.generateDiagram({
         description,
-        type: syntax.toLowerCase(),
-        diagram_subtype: diagramType?.toLowerCase() || 'auto',
         model,
+        syntax,
+        diagramType: diagramType?.toLowerCase() || 'auto',
         options: {
           agent: { enabled: true },
         },
       });
       
+      // Now update the diagram data after the component is mounted
       setDiagram({
         loading: false,
         code: response.code,
@@ -63,20 +67,25 @@ const App: React.FC = () => {
         id: response.id
       });
       
-      setCurrentScreen('workspace');
-      
       if (response.id) {
         const iterations = await diagramService.getAgentIterations(response.id);
         setAgentIterations(iterations);
       }
     } catch (err: any) {
-      const errorMessage = err.error || 'Failed to generate diagram';
+      // Extract HTTP status code for Axios errors
+      const statusCode = err.response?.status;
+      const statusText = err.response?.statusText;
+      const statusDisplay = statusCode ? ` (${statusCode}${statusText ? ` ${statusText}` : ''})` : '';
+      
+      const errorMessage = (err.error || (err.response?.data?.error) || 'Failed to generate diagram') + statusDisplay;
+      const errorDetails = err.details || err.response?.data || (err.message && { message: err.message });
+      
       setDiagram({
         loading: false,
         error: errorMessage,
         code: undefined
       });
-      toast.error(<ErrorToast message={errorMessage} details={err.details} />);
+      toast.error(<ErrorToast message={errorMessage} details={errorDetails} />);
     }
   };
 
@@ -95,9 +104,8 @@ const App: React.FC = () => {
     try {
       const response = await diagramService.requestChanges(diagram.id || 'current', {
         description: message,
-        type: currentSyntax.toLowerCase() ,
-        diagram_subtype: currentType.toLowerCase(),
         model,
+        diagramType: currentType.toLowerCase(),
         options: {
           agent: { enabled: true },
         },
@@ -116,13 +124,20 @@ const App: React.FC = () => {
         setAgentIterations(iterations);
       }
     } catch (err: any) {
-      const errorMessage = err.error || 'Failed to update diagram';
+      // Extract HTTP status code for Axios errors
+      const statusCode = err.response?.status;
+      const statusText = err.response?.statusText;
+      const statusDisplay = statusCode ? ` (${statusCode}${statusText ? ` ${statusText}` : ''})` : '';
+      
+      const errorMessage = (err.error || (err.response?.data?.error) || 'Failed to update diagram') + statusDisplay;
+      const errorDetails = err.details || err.response?.data || (err.message && { message: err.message });
+      
       setDiagram(prev => ({
         ...prev,
         loading: false,
         error: errorMessage
       }));
-      toast.error(<ErrorToast message={errorMessage} details={err.details} />);
+      toast.error(<ErrorToast message={errorMessage} details={errorDetails} />);
     }
   };
 
@@ -133,9 +148,13 @@ const App: React.FC = () => {
       error: undefined
     }));
     
+    // First make sure we're in workspace screen
+    setCurrentScreen('workspace');
+    
     try {
       const loadedDiagram = await diagramService.getDiagramById(diagramId);
       
+      // Now update the diagram data
       setDiagram({
         loading: false,
         code: loadedDiagram.code,
@@ -147,19 +166,25 @@ const App: React.FC = () => {
       const iterations = await diagramService.getAgentIterations(diagramId);
       setAgentIterations(iterations);
       
-      // Make sure we're in workspace screen
-      setCurrentScreen('workspace');
-      
       toast.success('Diagram loaded from history');
-    } catch (error) {
-      console.error('Failed to load diagram:', error);
-      toast.error('Failed to load diagram from history');
+    } catch (err: any) {
+      console.error('Failed to load diagram:', err);
+      
+      // Extract HTTP status code for Axios errors
+      const statusCode = err.response?.status;
+      const statusText = err.response?.statusText;
+      const statusDisplay = statusCode ? ` (${statusCode}${statusText ? ` ${statusText}` : ''})` : '';
+      
+      const errorMessage = (err.error || (err.response?.data?.error) || 'Failed to load diagram from history') + statusDisplay;
+      const errorDetails = err.details || err.response?.data || (err.message && { message: err.message });
       
       setDiagram(prev => ({
         ...prev,
         loading: false,
-        error: 'Failed to load diagram'
+        error: errorMessage
       }));
+      
+      toast.error(<ErrorToast message={errorMessage} details={errorDetails} />);
     }
   };
 
@@ -194,32 +219,34 @@ const App: React.FC = () => {
   };
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-        <CssBaseline />
-        
-        {currentScreen === 'configuration' && (
-          <ConfigurationScreen onStartDiagramGeneration={handleStartDiagramGeneration} />
-        )}
-        
-        {currentScreen === 'workspace' && (
-          <Layout
-            diagram={diagram}
-            logs={logs}
-            agentIterations={agentIterations}
-            onRequestChanges={handleRequestChanges}
-            onNewDiagram={handleNewDiagram}
-            onClearLogs={handleClearLogs}
-            onLoadDiagram={handleLoadDiagram}
-            onSyntaxChange={setCurrentSyntax}
-            onTypeChange={setCurrentType}
-            onCodeChange={(code) => setDiagram(prev => ({ ...prev, code }))}
-          />
-        )}
-        
-        <ToastContainer position="bottom-right" />
-      </Box>
-    </QueryClientProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+          <CssBaseline />
+          
+          {currentScreen === 'configuration' && (
+            <ConfigurationScreen onStartDiagramGeneration={handleStartDiagramGeneration} />
+          )}
+          
+          {currentScreen === 'workspace' && (
+            <Layout
+              diagram={diagram}
+              logs={logs}
+              agentIterations={agentIterations}
+              onRequestChanges={handleRequestChanges}
+              onNewDiagram={handleNewDiagram}
+              onClearLogs={handleClearLogs}
+              onLoadDiagram={handleLoadDiagram}
+              onSyntaxChange={() => {}} // Remove unused parameter
+              onTypeChange={setCurrentType}
+              onCodeChange={(code) => setDiagram(prev => ({ ...prev, code }))}
+            />
+          )}
+          
+          <ToastContainer position="bottom-right" />
+        </Box>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 };
 

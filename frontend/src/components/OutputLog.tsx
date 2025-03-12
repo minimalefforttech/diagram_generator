@@ -83,7 +83,15 @@ const OutputLog: React.FC<OutputLogProps> = ({ entries }) => {
   };
 
   return (
-    <Paper sx={{ flexGrow: 0, flexBasis: '30%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+    <Paper sx={{ 
+      flexGrow: 0, 
+      flexBasis: '30%',
+      minHeight: '30%',
+      maxHeight: '30%',
+      overflow: 'hidden', 
+      display: 'flex', 
+      flexDirection: 'column' 
+    }}>
       <Box sx={{ 
         p: 1.5, 
         display: 'flex', 
@@ -160,10 +168,18 @@ const OutputLog: React.FC<OutputLogProps> = ({ entries }) => {
         </Box>
       </Collapse>
 
-      <Collapse in={expanded} sx={{ flexGrow: 1, overflow: 'auto' }}>
+      <Collapse in={expanded} sx={{ flexGrow: 1, minHeight: 0 }}>
         <List dense sx={{ 
-          maxHeight: showFilters ? 'calc(100% - 60px)' : '100%',  
+          height: showFilters ? 'calc(100% - 60px)' : '100%',  
           overflow: 'auto',
+          scrollbarWidth: 'thin',
+          '&::-webkit-scrollbar': {
+            width: '8px',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            backgroundColor: 'rgba(255, 255, 255, 0.2)',
+            borderRadius: '4px',
+          },
           '& .MuiListItem-root': {
             py: 0.5
           }

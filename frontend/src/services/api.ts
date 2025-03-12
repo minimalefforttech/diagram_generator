@@ -1,59 +1,11 @@
 import axios, { AxiosInstance } from 'axios';
-
-export interface DiagramGenerationOptions {
-    model?: string;
-    agent?: {
-        enabled: boolean;
-        max_iterations?: number;
-        temperature?: number;
-    };
-    rag?: {
-        enabled: boolean;
-        api_doc_dir?: string;
-    };
-}
-
-export interface DiagramRequest {
-    description: string;
-    syntax_type?: string;  // mermaid, plantuml
-    subtype?: string;      // flowchart, sequence, etc
-    model?: string;
-    options?: DiagramGenerationOptions;
-}
-
-export interface DiagramResponse {
-    code: string;
-    type: string;
-    subtype: string;
-    notes: string[];
-}
-
-export interface SyntaxTypesResponse {
-    syntax: string[];
-    types: {
-        [key: string]: string[];
-    };
-}
-
-export interface LogEntry {
-  type: 'error' | 'llm' | 'info';
-  message: string;
-  timestamp: string;
-  details?: any;
-}
-
-export interface DiagramApiError {
-  error: string;
-  details?: any;
-}
-
-export interface ModelInfo {
-    id: string;
-    name: string;
-    provider: string;
-    size: number;
-    digest: string;
-}
+import { 
+    DiagramRequest, 
+    DiagramResponse, 
+    LogEntry, 
+    SyntaxTypesResponse,
+    ModelInfo
+} from '../types';
 
 const log = (message: string, details?: any) => {
     console.log(`[API] ${message}`, details);

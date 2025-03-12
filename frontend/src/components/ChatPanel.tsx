@@ -11,11 +11,16 @@ import {
   Divider,
   Alert,
   Tooltip,
+  Collapse,
+  IconButton,
+  useTheme,
 } from '@mui/material';
 import ModelSelector from './ModelSelector';
 import PaletteSelector, { DiagramPalette, getPaletteColors } from './PaletteSelector';
-import AddIcon from '@mui/icons-material/Add';
+import DiagramTypeSelector from './DiagramTypeSelector';
 import SendIcon from '@mui/icons-material/Send';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -27,20 +32,30 @@ interface Message {
 interface ChatPanelProps {
   currentDiagram?: string;
   onRequestChanges: (message: string, model: string) => void;
-  onNewDiagram: () => void;
+  onSyntaxChange?: (syntax: string) => void;
+  onTypeChange?: (type: string) => void;
 }
 
 const ChatPanel: React.FC<ChatPanelProps> = ({
   currentDiagram,
   onRequestChanges,
-  onNewDiagram,
+  onSyntaxChange,
+  onTypeChange,
 }) => {
+  const theme = useTheme();
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedModel, setSelectedModel] = useState('');
   const [modelError, setModelError] = useState<string | null>(null);
   const [lastSelectedModel, setLastSelectedModel] = useState('');
   const [selectedPalette, setSelectedPalette] = useState<DiagramPalette>('greyscale');
+  const [currentSyntax, setCurrentSyntax] = useState('mermaid');
+  const [currentType, setCurrentType] = useState('auto');
+  const [settingsExpanded, setSettingsExpanded] = useState(true);
+
+  const toggleSettings = () => {
+    setSettingsExpanded(!settingsExpanded);
+  };
 
   useEffect(() => {
     // Reset messages when diagram changes
@@ -61,8 +76,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
   const handlePaletteChange = (palette: DiagramPalette) => {
     setSelectedPalette(palette);
-    // Send palette change as a message
-    const paletteMessage = `Use this color theme: ${getPaletteColors(palette)}`;
+    // Send palette change as a message with theme mode context
+    const paletteMessage = `Use this color theme: ${getPaletteColors(palette)} on ${theme.palette.mode} background`;
     handleSubmitMessage(paletteMessage);
   };
 
@@ -83,8 +98,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     
     if (currentDiagram) {
       onRequestChanges(messageContent, selectedModel);
-    } else {
-      onNewDiagram(); // Should not reach here in the new UI flow, but handle it anyway
     }
   };
 
@@ -103,55 +116,119 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   // Allow submitting when only model is changed (no text input)
   const canSubmit = selectedModel && (message.trim() || (selectedModel !== lastSelectedModel));
 
+  const handleSyntaxChange = (syntax: string) => {
+    setCurrentSyntax(syntax);
+    if (onSyntaxChange) {
+      onSyntaxChange(syntax);
+    }
+    // Send syntax change as a message
+    handleSubmitMessage(`Change diagram syntax to: ${syntax}`);
+  };
+
+  const handleTypeChange = (type: string) => {
+    setCurrentType(type);
+    if (onTypeChange) {
+      onTypeChange(type);
+    }
+    // Send type change as a message
+    handleSubmitMessage(`Change diagram type to: ${type}`);
+  };
+
   return (
-    <Paper
-      sx={{
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        minHeight: 0
-      }}
-    >
-      {/* Header */}
+    <Paper sx={{ 
+      flexGrow: 1,
+      minHeight: 0,
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden'
+    }}>
       <Box sx={{ 
-        p: 2, 
+        p: 1.5, 
         borderBottom: 1, 
         borderColor: 'divider', 
         display: 'flex', 
         justifyContent: 'space-between', 
         alignItems: 'center',
-        flexShrink: 0
-      }}>
+        flexShrink: 0,
+        bgcolor: 'background.paper',
+        cursor: 'pointer',
+      }}
+      onClick={toggleSettings}
+      >
         <Typography variant="h6">
-          Chat
+          Diagram Settings
         </Typography>
-        <Button
-          variant="outlined"
-          startIcon={<AddIcon />}
-          onClick={onNewDiagram}
+        <IconButton
           size="small"
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleSettings();
+          }}
         >
-          New Diagram
-        </Button>
+          {settingsExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+        </IconButton>
       </Box>
 
+      <Collapse in={settingsExpanded}>
+        <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0, bgcolor: 'background.paper' }}>
+          <DiagramTypeSelector
+            currentSyntax={currentSyntax}
+            currentType={currentType}
+            onSyntaxChange={handleSyntaxChange}
+            onTypeChange={handleTypeChange}
+          />
+
+          <PaletteSelector
+            selectedPalette={selectedPalette}
+            onChange={handlePaletteChange}
+          />
+
+          <ModelSelector
+            selectedModel={selectedModel}
+            onModelChange={handleModelChange}
+          />
+        </Box>
+      </Collapse>
+
+      <Divider />
+
       {/* Messages List */}
-      <List sx={{ flexGrow: 1, overflow: 'auto', px: 2, minHeight: 0 }}>
+      <List sx={{ 
+        flexGrow: 1, 
+        overflow: 'auto', 
+        px: 2,
+        py: 1,
+        minHeight: 0,
+        bgcolor: (theme) => theme.palette.mode === 'dark' ? 'background.default' : 'grey.50',
+        scrollbarWidth: 'thin',
+        '&::-webkit-scrollbar': {
+          width: '8px',
+        },
+        '&::-webkit-scrollbar-thumb': {
+          backgroundColor: 'rgba(255, 255, 255, 0.2)',
+          borderRadius: '4px',
+        }
+      }}>
         {messages.map((msg, index) => (
           <React.Fragment key={index}>
             <ListItem
               alignItems="flex-start"
               sx={{
                 flexDirection: msg.role === 'user' ? 'row-reverse' : 'row',
+                mb: 1,
               }}
             >
               <ListItemText
-                primary={
+                primary={ 
                   <Typography
                     variant="body1"
                     sx={{
                       textAlign: msg.role === 'user' ? 'right' : 'left',
+                      bgcolor: msg.role === 'user' ? 'primary.dark' : 'background.paper',
+                      p: 1.5,
+                      borderRadius: 2,
+                      display: 'inline-block',
+                      maxWidth: '80%',
                     }}
                   >
                     {msg.content}
@@ -165,6 +242,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                       flexDirection: msg.role === 'user' ? 'row-reverse' : 'row',
                       alignItems: 'center',
                       gap: 1,
+                      mt: 0.5,
                     }}
                   >
                     <Typography variant="caption" color="textSecondary">
@@ -174,7 +252,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                       <Typography
                         variant="caption"
                         sx={{
-                          backgroundColor: 'rgba(25, 118, 210, 0.1)',
+                          backgroundColor: 'primary.main',
+                          color: 'primary.contrastText',
                           borderRadius: 1,
                           px: 1,
                           py: 0.25,
@@ -187,61 +266,61 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 }
               />
             </ListItem>
-            {index < messages.length - 1 && <Divider />}
+            {index < messages.length - 1 && <Divider sx={{ my: 1 }} />}
           </React.Fragment>
         ))}
       </List>
 
+      {/* Error Alert */}
       {modelError && (
-        <Box sx={{ px: 2, pb: 2, flexShrink: 0 }}>
+        <Box sx={{ px: 2, py: 1, flexShrink: 0, bgcolor: 'background.paper' }}>
           <Alert severity="error" onClose={() => setModelError(null)}>
             {modelError}
           </Alert>
         </Box>
       )}
 
-      <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
-        <PaletteSelector
-          selectedPalette={selectedPalette}
-          onChange={handlePaletteChange}
-        />
-
-        <ModelSelector
-          selectedModel={selectedModel}
-          onModelChange={handleModelChange}
-        />
-
-        <Box
-          component="form"
-          onSubmit={handleSubmit}
+      {/* Chat Input */}
+      <Box 
+        component="form"
+        onSubmit={handleSubmit}
+        sx={{
+          p: 2,
+          display: 'flex',
+          gap: 1,
+          borderTop: 1,
+          borderColor: 'divider',
+          bgcolor: 'background.paper',
+          flexShrink: 0,
+        }}
+      >
+        <TextField
+          fullWidth
+          multiline
+          maxRows={4}
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          placeholder="Request diagram changes..."
+          variant="outlined"
+          size="small"
           sx={{
-            display: 'flex',
-            gap: 1,
+            '& .MuiOutlinedInput-root': {
+              bgcolor: 'background.paper',
+            }
           }}
-        >
-          <TextField
-            fullWidth
-            multiline
-            maxRows={4}
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder="Request diagram changes or just change the model..."
-            variant="outlined"
-            size="small"
-          />
-          <Tooltip title={message.trim() ? "Send message" : "Generate with selected model"}>
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={!canSubmit}
-              sx={{ alignSelf: 'stretch' }}
-              endIcon={<SendIcon />}
-              onClick={() => handleSubmit()}
-            >
-              Send
-            </Button>
-          </Tooltip>
-        </Box>
+        />
+        <Tooltip title={message.trim() ? "Send message" : "Generate with selected model"}>
+          <Button
+            type="submit"
+            variant="contained"
+            disabled={!canSubmit}
+            sx={{ alignSelf: 'stretch' }}
+            endIcon={<SendIcon />}
+            onClick={() => handleSubmit()}
+          >
+            Send
+          </Button>
+        </Tooltip>
       </Box>
     </Paper>
   );

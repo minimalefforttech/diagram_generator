@@ -14,6 +14,7 @@ import {
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { diagramService } from '../services/api';
+import ThemeToggle from './ThemeToggle';
 
 interface ModelInfo {
   id: string;
@@ -130,8 +131,13 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
       alignItems: 'center',
       justifyContent: 'center',
       bgcolor: 'background.default',
-      p: 3
+      p: 3,
+      position: 'relative'
     }}>
+      <Box sx={{ position: 'absolute', top: 16, right: 16 }}>
+        <ThemeToggle />
+      </Box>
+
       <Paper 
         component="form"
         onSubmit={handleSubmit}

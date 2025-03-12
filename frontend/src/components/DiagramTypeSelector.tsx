@@ -61,8 +61,8 @@ const DiagramTypeSelector: React.FC<DiagramTypeSelectorProps> = ({
   };
 
   return (
-    <Box sx={{ display: 'flex', gap: 2 }}>
-      <FormControl size="small" sx={{ minWidth: 120 }} disabled={disabled || loading}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <FormControl size="small" disabled={disabled || loading}>
         <InputLabel id="syntax-type-label">Syntax</InputLabel>
         <Select
           labelId="syntax-type-label"
@@ -78,7 +78,7 @@ const DiagramTypeSelector: React.FC<DiagramTypeSelectorProps> = ({
         </Select>
       </FormControl>
 
-      <FormControl size="small" sx={{ minWidth: 120 }} disabled={disabled || loading}>
+      <FormControl size="small" disabled={disabled || loading}>
         <InputLabel id="diagram-type-label">Type</InputLabel>
         <Select
           labelId="diagram-type-label"

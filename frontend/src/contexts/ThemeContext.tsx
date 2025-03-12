@@ -1,65 +1,71 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { ThemeProvider as MuiThemeProvider, createTheme } from '@mui/material';
 
-export type ThemeMode = 'light' | 'dark';
-export type ColorPalette = 'greyscale' | 'bold' | 'pastel';
+type ThemeMode = 'light' | 'dark';
 
-export interface ThemeContextType {
+interface ThemeContextType {
   mode: ThemeMode;
-  colorPalette: ColorPalette;
-  toggleMode: () => void;
-  setColorPalette: (palette: ColorPalette) => void;
+  toggleTheme: () => void;
 }
 
-const defaultThemeContext: ThemeContextType = {
-  mode: 'dark',
-  colorPalette: 'greyscale',
-  toggleMode: () => {},
-  setColorPalette: () => {},
+const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
+
+export const useTheme = () => {
+  const context = useContext(ThemeContext);
+  if (!context) {
+    throw new Error('useTheme must be used within a ThemeProvider');
+  }
+  return context;
 };
 
-export const ThemeContext = createContext<ThemeContextType>(defaultThemeContext);
+const darkTheme = createTheme({
+  palette: {
+    mode: 'dark',
+    background: {
+      default: '#121212',
+      paper: '#1e1e1e',
+    },
+    primary: {
+      main: '#90caf9',
+    },
+  },
+});
 
-export const useTheme = () => useContext(ThemeContext);
+const lightTheme = createTheme({
+  palette: {
+    mode: 'light',
+    background: {
+      default: '#f5f5f5',
+      paper: '#ffffff',
+    },
+    primary: {
+      main: '#1976d2',
+    },
+  },
+});
 
-interface ThemeProviderProps {
-  children: React.ReactNode;
-}
-
-export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
-  // Load saved theme settings from localStorage or use defaults
+export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [mode, setMode] = useState<ThemeMode>(() => {
-    const savedMode = localStorage.getItem('themeMode') as ThemeMode;
-    return savedMode || 'dark';
+    // Get initial theme from localStorage or default to dark
+    const savedTheme = localStorage.getItem('theme');
+    return (savedTheme as ThemeMode) || 'dark';
   });
 
-  const [colorPalette, setColorPalette] = useState<ColorPalette>(() => {
-    const savedPalette = localStorage.getItem('colorPalette') as ColorPalette;
-    return savedPalette || 'greyscale';
-  });
-
-  // Save theme settings to localStorage when they change
   useEffect(() => {
-    localStorage.setItem('themeMode', mode);
+    localStorage.setItem('theme', mode);
   }, [mode]);
 
-  useEffect(() => {
-    localStorage.setItem('colorPalette', colorPalette);
-  }, [colorPalette]);
-
-  const toggleMode = () => {
-    setMode(prevMode => (prevMode === 'light' ? 'dark' : 'light'));
+  const toggleTheme = () => {
+    setMode((prevMode) => (prevMode === 'light' ? 'dark' : 'light'));
   };
 
-  const handleSetColorPalette = (palette: ColorPalette) => {
-    setColorPalette(palette);
-  };
+  const theme = mode === 'light' ? lightTheme : darkTheme;
 
-  const value = {
-    mode,
-    colorPalette,
-    toggleMode,
-    setColorPalette: handleSetColorPalette,
-  };
-
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={{ mode, toggleTheme }}>
+      <MuiThemeProvider theme={theme}>
+        {children}
+      </MuiThemeProvider>
+    </ThemeContext.Provider>
+  );
 };

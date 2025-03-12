@@ -5,10 +5,13 @@ import {
   Typography, 
   CircularProgress, 
   TextField,
-  Divider
+  Divider,
+  IconButton,
+  Tooltip,
+  Button
 } from '@mui/material';
+import { Code as CodeIcon, BubbleChart as BubbleChartIcon } from '@mui/icons-material'
 import mermaid from 'mermaid';
-import DiagramTypeSelector from './DiagramTypeSelector';
 import PlantUMLViewer from './PlantUMLViewer';
 
 interface DiagramPanelProps {
@@ -19,6 +22,7 @@ interface DiagramPanelProps {
   onCodeChange?: (newCode: string) => void;
   onSyntaxChange?: (syntax: string) => void;
   onTypeChange?: (type: string) => void;
+  onToggleCodeEditor?: () => void;
 }
 
 const DiagramPanel: React.FC<DiagramPanelProps> = ({
@@ -27,8 +31,7 @@ const DiagramPanel: React.FC<DiagramPanelProps> = ({
   error,
   showCodeEditor = false,
   onCodeChange,
-  onSyntaxChange,
-  onTypeChange
+  onToggleCodeEditor,
 }) => {
   const diagramRef = useRef<HTMLDivElement>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
@@ -76,10 +79,12 @@ const DiagramPanel: React.FC<DiagramPanelProps> = ({
     }
   }, [code]);
 
-  // Render diagram when code changes or editor mode toggles
+  // Render diagram when code changes or when showCodeEditor changes
   useEffect(() => {
     const renderDiagram = async () => {
-      if (!code || !diagramRef.current || showCodeEditor) return;
+      // Only skip rendering if we're explicitly showing the code editor
+      // This allows the diagram to render on first load and when switching back to diagram view
+      if (!diagramRef.current || !code || (showCodeEditor === true)) return;
 
       try {
         setRenderError(null);
@@ -102,7 +107,7 @@ const DiagramPanel: React.FC<DiagramPanelProps> = ({
     };
 
     renderDiagram();
-  }, [code, showCodeEditor, currentSyntax]);
+  }, [code, currentSyntax, showCodeEditor]); // Include all dependencies that should trigger a re-render
 
   const handleCodeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = event.target.value;
@@ -112,25 +117,6 @@ const DiagramPanel: React.FC<DiagramPanelProps> = ({
     }
   };
   
-  const handleSyntaxChange = (syntax: string) => {
-    const normalizedSyntax = syntax.toLowerCase();
-    if (normalizedSyntax !== currentSyntax) {
-      setCurrentSyntax(normalizedSyntax);
-      if (onSyntaxChange) {
-        onSyntaxChange(normalizedSyntax);
-      }
-    }
-  };
-  
-  const handleTypeChange = (type: string) => {
-    const normalizedType = type.toLowerCase();
-    if (normalizedType !== currentType) {
-      setCurrentType(normalizedType);
-      if (onTypeChange) {
-        onTypeChange(normalizedType);
-      }
-    }
-  };
 
   return (
     <Paper
@@ -144,16 +130,21 @@ const DiagramPanel: React.FC<DiagramPanelProps> = ({
         position: 'relative',
       }}
     >
-      <Box sx={{ mb: 2, flexShrink: 0 }}>
-        <DiagramTypeSelector
-          currentSyntax={currentSyntax}
-          currentType={currentType}
-          onSyntaxChange={handleSyntaxChange}
-          onTypeChange={handleTypeChange}
-          disabled={loading}
-        />
+      <Box sx={{ mb: 2, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={showCodeEditor ? 
+            <BubbleChartIcon /> : 
+            <CodeIcon />
+          }
+          onClick={() => onToggleCodeEditor?.()}
+          sx={{ mr: 1 }}
+        >
+          {showCodeEditor ? "Show Diagram" : "Show Code"}
+        </Button>
       </Box>
-      
+
       <Divider sx={{ mb: 2, flexShrink: 0 }} />
       
       {loading && (
@@ -165,13 +156,21 @@ const DiagramPanel: React.FC<DiagramPanelProps> = ({
             right: 0,
             bottom: 0,
             display: 'flex',
+            flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
             zIndex: 10,
+            gap: 2
           }}
         >
-          <CircularProgress />
+          <CircularProgress size={60} />
+          <Typography variant="h6" color="white">
+            Generating Diagram...
+          </Typography>
+          <Typography variant="body2" color="white" sx={{ textAlign: 'center', maxWidth: '80%' }}>
+            This may take a few moments while the AI processes your request
+          </Typography>
         </Box>
       )}
 
@@ -202,11 +201,20 @@ const DiagramPanel: React.FC<DiagramPanelProps> = ({
             flexGrow: 1,
             minHeight: 0,
             '& .MuiInputBase-root': {
-              height: '100%'
+              height: '100%',
+              overflow: 'auto'
             },
             '& .MuiInputBase-input': {
               height: '100%',
-              overflow: 'auto'
+              overflow: 'auto !important',
+              scrollbarWidth: 'thin',
+              '&::-webkit-scrollbar': {
+                width: '8px',
+              },
+              '&::-webkit-scrollbar-thumb': {
+                backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                borderRadius: '4px',
+              }
             }
           }}
         />
@@ -219,17 +227,29 @@ const DiagramPanel: React.FC<DiagramPanelProps> = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            scrollbarWidth: 'thin',
+            '&::-webkit-scrollbar': {
+              width: '8px',
+              height: '8px'
+            },
+            '&::-webkit-scrollbar-thumb': {
+              backgroundColor: 'rgba(255, 255, 255, 0.2)',
+              borderRadius: '4px',
+            }
           }}
         >
           {currentSyntax === 'mermaid' ? (
             <Box
               ref={diagramRef}
               sx={{
-                width: '100%',
-                height: '100%',
+                width: 'fit-content',
+                height: 'fit-content',
+                maxWidth: '100%',
+                maxHeight: '100%',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                padding: 2,
                 '& svg': {
                   maxWidth: '100%',
                   maxHeight: '100%',
