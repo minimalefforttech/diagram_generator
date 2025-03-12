@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 
 import requests
 from requests_cache import CachedSession
+import logging
 
 class OllamaService:
     """Service for interacting with Ollama API."""
@@ -43,7 +44,7 @@ class OllamaService:
             return response.status_code == 200
         except requests.RequestException:
             return False
-
+            
     def get_available_models(self) -> List[Dict[str, Any]]:
         """Get list of available models from Ollama.
         
@@ -53,9 +54,37 @@ class OllamaService:
         Raises:
             requests.RequestException: If API call fails
         """
-        response = self.session.get(f"{self.base_url}/api/tags")
-        response.raise_for_status()
-        return response.json().get("models", [])
+        try:
+            response = self.session.get(f"{self.base_url}/api/tags")
+            response.raise_for_status()
+            models = response.json().get("models", [])
+            
+            # Transform the response to match our expected format
+            formatted_models = []
+            for model_info in models:
+                model_name = model_info.get("name", "")
+                    
+                formatted_models.append({
+                    "id": model_info.get("model", model_name),
+                    "name": model_name,
+                    "provider": "ollama",
+                    "size": model_info.get("size", 0),
+                    "digest": model_info.get("digest", "")
+                })
+            
+            return formatted_models
+            
+        except requests.RequestException as e:
+            # Return default model if we can't fetch the list
+            logging.error(f"Failed to fetch models: {e}")
+            return [{
+                "id": self.model,
+                "name": self.model,
+                "provider": "ollama",
+                "size": 0,
+                "digest": ""
+            }]
+            
 
     def generate_completion(
         self,

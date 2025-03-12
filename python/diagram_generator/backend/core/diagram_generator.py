@@ -1,13 +1,12 @@
 """Core diagram generation and validation logic."""
 
 import os
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from diagram_generator.backend.agents import DiagramAgent
 from diagram_generator.backend.models.configs import DiagramGenerationOptions, DiagramRAGConfig
 from diagram_generator.backend.services.ollama import OllamaService
 from diagram_generator.backend.utils.rag import RAGProvider
-
 
 class DiagramGenerator:
     """Handles generation and validation of diagrams."""
@@ -70,6 +69,13 @@ Source diagram:
         # Convert dict options to DiagramGenerationOptions if needed
         generation_options = self._prepare_options(options)
         
+        # Extract model from options if provided
+        model = None
+        if isinstance(options, dict):
+            model = options.get("model")
+            if model and isinstance(generation_options, DiagramGenerationOptions):
+                generation_options.agent.model_name = model
+        
         # Use the agent-based approach if enabled
         if generation_options.agent.enabled:
             # Initialize RAG provider if needed
@@ -81,7 +87,7 @@ Source diagram:
                 description=description,
                 diagram_type=diagram_type,
                 options=generation_options,
-                rag_provider=self.rag_provider,
+                rag_provider=self.rag_provider
             )
             
         # Fall back to legacy implementation if agent is disabled
@@ -92,7 +98,8 @@ Source diagram:
         
         response = self.llm_service.generate_completion(
             prompt=prompt,
-            temperature=0.2  # Lower temperature for more consistent output
+            temperature=0.2,
+            model=model or self.llm_service.model
         )
         
         # Extract diagram code and any warnings
@@ -167,7 +174,8 @@ Source diagram:
         self,
         diagram: str,
         source_type: str,
-        target_type: str
+        target_type: str,
+        options = None
     ) -> Tuple[str, List[str]]:
         """Convert diagram between different syntax types.
         
@@ -187,7 +195,8 @@ Source diagram:
         
         response = self.llm_service.generate_completion(
             prompt=prompt,
-            temperature=0.3
+            temperature=0.3,
+            model=options.get("model") if options else self.llm_service.model
         )
         
         code = response["response"]
