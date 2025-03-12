@@ -1,7 +1,7 @@
 # ADR 004: UI Improvements and Theme System
 
 ## Status
-Proposed
+Implemented
 
 ## Context
 After initial implementation of the backend system and basic UI components, we need to enhance the user experience with better UI flow, theme options, navigation capabilities, and diagram export functionality. The current interface lacks:
@@ -99,6 +99,22 @@ Optimize the chat interaction flow:
   - Restore associated chat context when loading history
   - Enable resuming work from any historical point
 
+### 6. Persistent Sidebar for Logs and History
+
+Implement an accessible sidebar for logs and history management:
+
+- Create a persistent sidebar accessible from any screen (configuration or workspace)
+- Include toggle buttons for switching between logs and history views
+- Implement slide-in/slide-out animation activated by clicking icon buttons
+- Make sidebar content fully scrollable for better usability
+- Use rounded corners and proper spacing for better visual appeal
+- Close sidebar when clicking outside or selecting a diagram from history
+- Provide full-width display of log entries and diagram history
+- Add filtering and search capabilities for logs
+- Show timestamps and log levels with appropriate color coding
+- Ensure history items show diagrams' titles, syntax types, and creation times
+- Store UI preferences for sidebar width in local storage
+
 ## Implementation Plan
 
 ### Phase 1: Multi-Screen Workflow
@@ -131,6 +147,13 @@ Optimize the chat interaction flow:
 3. Enable syntax switching capability (Mermaid/PlantUML)
 4. Add support for specialized diagram types
 
+### Phase 6: Sidebar Implementation
+1. Create persistent sidebar component with toggle functionality
+2. Implement slide-in/slide-out animation and click-outside detection
+3. Integrate logs and history components into the sidebar
+4. Add preference storage for sidebar width
+5. Move sidebar to top-level component (App.tsx) for cross-screen visibility
+
 ## Consequences
 
 ### Positive
@@ -138,9 +161,10 @@ Optimize the chat interaction flow:
 - Better diagram configuration options with validation
 - Greater accessibility through theme customization
 - Enhanced utility with export and navigation features
-- Better visibility into system operations with iteration counter
+- Better visibility into system operations with iteration counter and persistent logs
 - More flexible diagram creation and modification workflow
 - Proper log management and history navigation
+- Consistent access to logs and history across all screens
 
 ### Negative
 - Increased frontend complexity with multi-screen workflow
@@ -160,6 +184,8 @@ Optimize the chat interaction flow:
 | History/log storage growing too large | Implement retention policies and pagination |
 | Export compatibility issues | Test exports across different browsers |
 | Increased bundle size | Implement code-splitting and lazy loading |
+| Sidebar interfering with main UI | Careful z-index management and proper animation timing |
+| Too many UI elements overwhelming users | Prioritize most important controls and progressive disclosure |
 
 ## Success Metrics
 
@@ -177,12 +203,27 @@ We will measure the success of these UI improvements by:
    - Navigation control usage
    - History selection usage
    - Diagram type selection patterns
+   - Sidebar usage frequency and duration
 
 3. System Performance
    - Time to load and render diagrams
    - Responsiveness during interactions
    - Memory usage with complex diagrams
    - Backend log storage efficiency
+
+## Implementation Status
+
+The following components have been successfully implemented:
+
+1. Multi-screen workflow with configuration and workspace screens
+2. Light/dark mode toggle with localStorage persistence
+3. Agent iteration counter in the workspace header
+4. Code editor toggle functionality
+5. Log clearing functionality (frontend and backend)
+6. New Diagram button with proper navigation
+7. Persistent sidebar for logs and history accessible from all screens
+8. Click-to-expand sidebar with proper animations and responsiveness
+9. UI preferences storage for remembering user customizations
 
 ## References
 

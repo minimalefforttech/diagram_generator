@@ -10,12 +10,10 @@ import {
   IconButton,
   Tooltip,
   CircularProgress,
-  Alert,
-  Collapse
+  Alert
 } from '@mui/material';
 import HistoryIcon from '@mui/icons-material/History';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { diagramService } from '../services/api';
 
 interface DiagramHistoryItem {
@@ -30,13 +28,13 @@ interface DiagramHistoryItem {
 interface DiagramHistoryProps {
   onSelectDiagram: (diagramId: string) => void;
   currentDiagramId?: string;
+  alwaysExpanded?: boolean;
 }
 
-const DiagramHistory: React.FC<DiagramHistoryProps> = ({ onSelectDiagram, currentDiagramId }) => {
+const DiagramHistory: React.FC<DiagramHistoryProps> = ({ onSelectDiagram, currentDiagramId, alwaysExpanded = false }) => {
   const [history, setHistory] = useState<DiagramHistoryItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState<boolean>(false);
 
   const fetchHistory = async () => {
     try {
@@ -56,12 +54,9 @@ const DiagramHistory: React.FC<DiagramHistoryProps> = ({ onSelectDiagram, curren
     fetchHistory();
   }, []);
 
-  const handleRefresh = () => {
+  const handleRefresh = (e: React.MouseEvent) => {
+    e.stopPropagation();
     fetchHistory();
-  };
-
-  const toggleExpanded = () => {
-    setExpanded(!expanded);
   };
 
   const formatDate = (dateString: string) => {
@@ -71,101 +66,98 @@ const DiagramHistory: React.FC<DiagramHistoryProps> = ({ onSelectDiagram, curren
 
   return (
     <Paper sx={{ 
-      flexBasis: 200, 
-      flexShrink: 0,
+      flexGrow: 1,
       display: 'flex',
       flexDirection: 'column',
-      overflow: 'hidden'
+      overflow: 'hidden',
+      height: '100%',
+      borderRadius: alwaysExpanded ? 0 : undefined
     }}>
       <Box sx={{ 
-        p: 1.5,
+        p: 1.5, 
         display: 'flex', 
         justifyContent: 'space-between',
         alignItems: 'center',
         borderBottom: 1,
-        borderColor: 'divider',
-        cursor: 'pointer'
-      }}
-      onClick={toggleExpanded}>
+        borderColor: 'divider'
+      }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <HistoryIcon />
           <Typography variant="subtitle1">Diagram History</Typography>
         </Box>
         <IconButton
           size="small"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleRefresh();
-          }}
+          onClick={handleRefresh}
           disabled={loading}
         >
-          {expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+          <RefreshIcon />
         </IconButton>
       </Box>
       
-      <Collapse in={expanded}>
-        <Box sx={{ maxHeight: 300, overflow: 'auto',
-            scrollbarWidth: 'thin',
-            '&::-webkit-scrollbar': {
-              width: '8px',
-            },
-            '&::-webkit-scrollbar-thumb': {
-              backgroundColor: 'rgba(255, 255, 255, 0.2)',
-              borderRadius: '4px',
-            }
-        }}>
-          {loading ? (
-            <Box sx={{ p: 2, display: 'flex', justifyContent: 'center' }}>
-              <CircularProgress size={24} />
-            </Box>
-          ) : error ? (
-            <Alert severity="error" sx={{ m: 1 }}>
-              {error}
-            </Alert>
-          ) : history.length === 0 ? (
-            <Typography sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}>
-              No diagram history found
-            </Typography>
-          ) : (
-            <List dense disablePadding>
-              {history.map((item) => (
-                <ListItem 
-                  key={item.id}
-                  disablePadding
-                  secondaryAction={
-                    <Tooltip title="Time created">
-                      <Typography variant="caption" color="text.secondary">
-                        {formatDate(item.createdAt)}
-                      </Typography>
-                    </Tooltip>
-                  }
+      <Box sx={{ 
+        maxHeight: alwaysExpanded ? '100%' : 300, 
+        flexGrow: 1,
+        overflow: 'auto',
+        scrollbarWidth: 'thin',
+        '&::-webkit-scrollbar': {
+          width: '8px',
+        },
+        '&::-webkit-scrollbar-thumb': {
+          backgroundColor: 'rgba(255, 255, 255, 0.2)',
+          borderRadius: '4px',
+        }
+      }}>
+        {loading ? (
+          <Box sx={{ p: 2, display: 'flex', justifyContent: 'center' }}>
+            <CircularProgress size={24} />
+          </Box>
+        ) : error ? (
+          <Alert severity="error" sx={{ m: 1 }}>
+            {error}
+          </Alert>
+        ) : history.length === 0 ? (
+          <Typography sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}>
+            No diagram history found
+          </Typography>
+        ) : (
+          <List dense disablePadding>
+            {history.map((item) => (
+              <ListItem 
+                key={item.id}
+                disablePadding
+                secondaryAction={
+                  <Tooltip title="Time created">
+                    <Typography variant="caption" color="text.secondary">
+                      {formatDate(item.createdAt)}
+                    </Typography>
+                  </Tooltip>
+                }
+              >
+                <ListItemButton
+                  selected={item.id === currentDiagramId}
+                  onClick={() => onSelectDiagram(item.id)}
                 >
-                  <ListItemButton
-                    selected={item.id === currentDiagramId}
-                    onClick={() => onSelectDiagram(item.id)}
-                  >
-                    <ListItemText 
-                      primary={item.description}
-                      secondary={
-                        <Box sx={{ display: 'flex', gap: 1 }}>
-                          <Typography variant="caption" color="primary">
-                            {item.syntax}
+                  <ListItemText 
+                    primary={item.description}
+                    secondary={
+                      <Box sx={{ display: 'flex', gap: 1 }}>
+                        <Typography variant="caption" color="primary">
+                          {item.syntax}
+                        </Typography>
+                        {item.iterations && (
+                          <Typography variant="caption" color="text.secondary">
+                            Iterations: {item.iterations}
                           </Typography>
-                          {item.iterations && (
-                            <Typography variant="caption" color="text.secondary">
-                              Iterations: {item.iterations}
-                            </Typography>
-                          )}
-                        </Box>
-                      }
-                    />
-                  </ListItemButton>
-                </ListItem>
-              ))}
-            </List>
-          )}
-        </Box>
-      </Collapse>
+                        )}
+                      </Box>
+                    }
+                  />
+                </ListItemButton>
+              </ListItem>
+            ))}
+          </List>
+        )}
+      </Box>
     </Paper>
   );
 };

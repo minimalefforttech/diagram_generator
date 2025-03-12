@@ -27,9 +27,10 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 
 interface OutputLogProps {
   entries: LogEntry[];
+  alwaysExpanded?: boolean;
 }
 
-const OutputLog: React.FC<OutputLogProps> = ({ entries }) => {
+const OutputLog: React.FC<OutputLogProps> = ({ entries, alwaysExpanded = false }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [logLevel, setLogLevel] = useState<string>('all');
   const [showFilters, setShowFilters] = useState(false);
@@ -48,7 +49,9 @@ const OutputLog: React.FC<OutputLogProps> = ({ entries }) => {
   };
 
   const toggleExpanded = () => {
-    setExpanded(!expanded);
+    if (!alwaysExpanded) {
+      setExpanded(!expanded);
+    }
   };
 
   // Filter logs based on search term and level
@@ -84,13 +87,12 @@ const OutputLog: React.FC<OutputLogProps> = ({ entries }) => {
 
   return (
     <Paper sx={{ 
-      flexGrow: 0, 
-      flexBasis: '30%',
-      minHeight: '30%',
-      maxHeight: '30%',
-      overflow: 'hidden', 
+      flexGrow: 1,
       display: 'flex', 
-      flexDirection: 'column' 
+      flexDirection: 'column',
+      overflow: 'hidden',
+      height: '100%',
+      borderRadius: alwaysExpanded ? 0 : undefined
     }}>
       <Box sx={{ 
         p: 1.5, 
@@ -99,9 +101,9 @@ const OutputLog: React.FC<OutputLogProps> = ({ entries }) => {
         alignItems: 'center',
         borderBottom: 1,
         borderColor: 'divider',
-        cursor: 'pointer'
+        cursor: alwaysExpanded ? 'default' : 'pointer'
       }}
-      onClick={toggleExpanded}
+      onClick={alwaysExpanded ? undefined : toggleExpanded}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Typography variant="subtitle1">Log Output</Typography>
@@ -125,9 +127,11 @@ const OutputLog: React.FC<OutputLogProps> = ({ entries }) => {
               <FilterListIcon fontSize="small" />
             </IconButton>
           </Tooltip>
-          <IconButton size="small">
-            {expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-          </IconButton>
+          {!alwaysExpanded && (
+            <IconButton size="small">
+              {expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+            </IconButton>
+          )}
         </Box>
       </Box>
 
@@ -168,7 +172,7 @@ const OutputLog: React.FC<OutputLogProps> = ({ entries }) => {
         </Box>
       </Collapse>
 
-      <Collapse in={expanded} sx={{ flexGrow: 1, minHeight: 0 }}>
+      <Collapse in={alwaysExpanded || expanded} sx={{ flexGrow: 1, minHeight: 0 }}>
         <List dense sx={{ 
           height: showFilters ? 'calc(100% - 60px)' : '100%',  
           overflow: 'auto',
@@ -179,9 +183,6 @@ const OutputLog: React.FC<OutputLogProps> = ({ entries }) => {
           '&::-webkit-scrollbar-thumb': {
             backgroundColor: 'rgba(255, 255, 255, 0.2)',
             borderRadius: '4px',
-          },
-          '& .MuiListItem-root': {
-            py: 0.5
           }
         }}>
           {filteredEntries.length > 0 ? (

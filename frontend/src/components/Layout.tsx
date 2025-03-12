@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { 
   Box, 
   Container, 
-  Grid, 
   Typography,
   Button,
   Chip,
@@ -11,8 +10,7 @@ import {
 import { DiagramState } from '../types';
 import DiagramPanel from './DiagramPanel';
 import ChatPanel from './ChatPanel';
-import OutputLog from './OutputLog';
-import DiagramHistory from './DiagramHistory';
+import { useUIPreferences } from '../contexts/UIPreferencesContext';
 import ThemeToggle from './ThemeToggle';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -43,34 +41,11 @@ const Layout: React.FC<LayoutProps> = ({
   onTypeChange,
   onCodeChange
 }) => {
+  const { preferences } = useUIPreferences();
   const [showCodeEditor, setShowCodeEditor] = useState<boolean>(false);
 
   const toggleCodeEditor = () => {
     setShowCodeEditor(prev => !prev);
-  };
-
-  const handleSelectDiagram = (diagramId: string) => {
-    if (onLoadDiagram) {
-      onLoadDiagram(diagramId);
-    }
-  };
-
-  const handleSyntaxChange = (syntax: string) => {
-    if (onSyntaxChange) {
-      onSyntaxChange(syntax);
-    }
-  };
-
-  const handleTypeChange = (type: string) => {
-    if (onTypeChange) {
-      onTypeChange(type);
-    }
-  };
-
-  const handleCodeChange = (code: string) => {
-    if (onCodeChange) {
-      onCodeChange(code);
-    }
   };
 
   return (
@@ -83,6 +58,7 @@ const Layout: React.FC<LayoutProps> = ({
         overflow: 'hidden'
       }}
     >
+      {/* Header */}
       <Box sx={{ 
         py: 1, 
         px: 2, 
@@ -90,7 +66,8 @@ const Layout: React.FC<LayoutProps> = ({
         justifyContent: 'space-between',
         alignItems: 'center',
         borderBottom: '1px solid rgba(255, 255, 255, 0.12)',
-        flexShrink: 0
+        flexShrink: 0,
+        zIndex: 1100
       }}>
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
           <Typography variant="h6" component="div">
@@ -130,80 +107,62 @@ const Layout: React.FC<LayoutProps> = ({
         </Box>
       </Box>
       
+      {/* Main Content */}
       <Container 
-        maxWidth={false} 
+        maxWidth={false}
+        className="main-container"
         sx={{ 
           flexGrow: 1,
           height: 'calc(100vh - 56px)', // Account for header height
           py: 2,
-          overflow: 'hidden'
+          overflow: 'hidden',
+          position: 'relative',
+          pl: '56px', // Add left padding to account for sidebar icons
         }}
       >
-        <Grid 
-          container 
-          spacing={2} 
+        {/* Main Content Area */}
+        <Box 
           sx={{ 
             height: '100%',
-            margin: 0,
-            width: '100%'
+            display: 'flex',
+            gap: 2
           }}
         >
-          {/* Left side: Diagram */}
-          <Grid 
-            item 
-            xs={12} 
-            md={8} 
+          {/* Diagram Panel */}
+          <Box 
             sx={{ 
+              flexGrow: 1,
               height: '100%',
-              paddingTop: '0 !important',
-              paddingLeft: '0 !important'
-            }}
-          >
-            <Box sx={{ 
-              height: '100%', 
-              display: 'flex', 
-              flexDirection: 'column', 
-              gap: 2
-            }}>
-              <DiagramPanel
-                code={diagram.code}
-                loading={diagram.loading}
-                error={diagram.error}
-                showCodeEditor={showCodeEditor}
-                onCodeChange={handleCodeChange}
-                onSyntaxChange={handleSyntaxChange}
-                onTypeChange={handleTypeChange}
-                onToggleCodeEditor={toggleCodeEditor}
-              />
-              <OutputLog entries={logs} />
-            </Box>
-          </Grid>
-
-          {/* Right side: Interaction Panel */}
-          <Grid 
-            item 
-            xs={12} 
-            md={4} 
-            sx={{ 
-              height: '100%',
-              paddingTop: '0 !important',
               display: 'flex',
               flexDirection: 'column',
-              gap: 2,
-              overflow: 'hidden'
+              minWidth: 0
             }}
           >
+            <DiagramPanel
+              code={diagram.code}
+              loading={diagram.loading}
+              error={diagram.error}
+              showCodeEditor={showCodeEditor}
+              onCodeChange={onCodeChange}
+              onSyntaxChange={onSyntaxChange}
+              onTypeChange={onTypeChange}
+              onToggleCodeEditor={toggleCodeEditor}
+            />
+          </Box>
+
+          {/* Chat Panel */}
+          <Box sx={{ 
+            width: '400px',
+            flexShrink: 0
+          }}>
             <ChatPanel
               currentDiagram={diagram.code}
               onRequestChanges={onRequestChanges}
-              onNewDiagram={onNewDiagram}
+              onSyntaxChange={onSyntaxChange}
+              onTypeChange={onTypeChange}
             />
-            <DiagramHistory 
-              onSelectDiagram={handleSelectDiagram}
-              currentDiagramId={diagram.id}
-            />
-          </Grid>
-        </Grid>
+          </Box>
+        </Box>
       </Container>
     </Box>
   );

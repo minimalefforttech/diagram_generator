@@ -9,6 +9,8 @@ import { ErrorToast } from './components/ErrorToast';
 import 'react-toastify/dist/ReactToastify.css';
 import ConfigurationScreen from './components/ConfigurationScreen';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { UIPreferencesProvider } from './contexts/UIPreferencesContext';
+import SideBar from './components/SideBar';
 
 const App: React.FC = () => {
   const [diagram, setDiagram] = useState<DiagramState>({
@@ -220,32 +222,41 @@ const App: React.FC = () => {
 
   return (
     <ThemeProvider>
-      <QueryClientProvider client={queryClient}>
-        <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
-          <CssBaseline />
-          
-          {currentScreen === 'configuration' && (
-            <ConfigurationScreen onStartDiagramGeneration={handleStartDiagramGeneration} />
-          )}
-          
-          {currentScreen === 'workspace' && (
-            <Layout
-              diagram={diagram}
+      <UIPreferencesProvider>
+        <QueryClientProvider client={queryClient}>
+          <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+            <CssBaseline />
+            
+            {currentScreen === 'configuration' && (
+              <ConfigurationScreen onStartDiagramGeneration={handleStartDiagramGeneration} />
+            )}
+            
+            {currentScreen === 'workspace' && (
+              <Layout
+                diagram={diagram}
+                logs={logs}
+                agentIterations={agentIterations}
+                onRequestChanges={handleRequestChanges}
+                onNewDiagram={handleNewDiagram}
+                onClearLogs={handleClearLogs}
+                onLoadDiagram={handleLoadDiagram}
+                onSyntaxChange={() => {}} // Remove unused parameter
+                onTypeChange={setCurrentType}
+                onCodeChange={(code) => setDiagram(prev => ({ ...prev, code }))}
+              />
+            )}
+            
+            {/* SideBar visible across all screens */}
+            <SideBar
               logs={logs}
-              agentIterations={agentIterations}
-              onRequestChanges={handleRequestChanges}
-              onNewDiagram={handleNewDiagram}
-              onClearLogs={handleClearLogs}
-              onLoadDiagram={handleLoadDiagram}
-              onSyntaxChange={() => {}} // Remove unused parameter
-              onTypeChange={setCurrentType}
-              onCodeChange={(code) => setDiagram(prev => ({ ...prev, code }))}
+              onSelectDiagram={handleLoadDiagram}
+              currentDiagramId={diagram.id}
             />
-          )}
-          
-          <ToastContainer position="bottom-right" />
-        </Box>
-      </QueryClientProvider>
+            
+            <ToastContainer position="bottom-right" />
+          </Box>
+        </QueryClientProvider>
+      </UIPreferencesProvider>
     </ThemeProvider>
   );
 };
