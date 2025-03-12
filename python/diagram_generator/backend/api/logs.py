@@ -47,6 +47,16 @@ class LogService:
 # Create a singleton instance
 log_service = LogService()
 
+# Helper functions for logging specific types of events
+def log_llm(message: str, details: Optional[Any] = None) -> LogEntry:
+    """Log an LLM-related event."""
+    return log_service.add_entry("llm", message, details)
+
+def log_error(message: str, details: Optional[Any] = None) -> LogEntry:
+    """Log an error event."""
+    logger.error(message, extra={"details": details})
+    return log_service.add_entry("error", message, details)
+
 router = APIRouter(
     prefix="/logs",
     tags=["logs"],

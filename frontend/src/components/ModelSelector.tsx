@@ -7,44 +7,45 @@ import {
   MenuItem,
   Typography,
   SelectChangeEvent,
+  CircularProgress,
 } from '@mui/material';
 import { diagramService } from '../services/api';
-
-export interface Model {
-  id: string;
-  name: string;
-  provider: string;
-}
+import type { ModelInfo } from '../services/api';
 
 interface ModelSelectorProps {
   selectedModel: string;
   onModelChange: (model: string) => void;
+  service?: string;
 }
 
 const ModelSelector: React.FC<ModelSelectorProps> = ({
   selectedModel,
   onModelChange,
+  service = 'ollama'
 }) => {
-  const [availableModels, setAvailableModels] = useState<Model[]>([]);
+  const [availableModels, setAvailableModels] = useState<ModelInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch models only once on component mount
+  // Fetch models when the service changes
   useEffect(() => {
     const fetchModels = async () => {
+      setLoading(true);
+      setError(null);
+      
       try {
-        const models = await diagramService.getAvailableModels();
+        const models = await diagramService.getAvailableModels(service);
         setAvailableModels(models);
       } catch (error) {
-        setError('Failed to load models');
-        console.error('Failed to load models:', error);
+        setError(`Failed to load models from ${service}`);
+        console.error(`Failed to load models from ${service}:`, error);
       } finally {
         setLoading(false);
       }
     };
 
     fetchModels();
-  }, []);
+  }, [service]);
 
   // Separate effect for model selection
   useEffect(() => {
@@ -58,7 +59,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
   };
 
   // Format model name for display
-  const formatModelName = (model: Model): string => {
+  const formatModelName = (model: ModelInfo): string => {
     const parts = model.name.split(':');
     const baseName = parts[0];
     const tag = parts.length > 1 ? parts[1] : 'latest';
@@ -74,6 +75,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
           <Select value="" label="Model" disabled>
             <MenuItem value="">
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <CircularProgress size={16} sx={{ mr: 1 }} />
                 <Typography>Loading models...</Typography>
               </Box>
             </MenuItem>
@@ -94,7 +96,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
             label="Model"
             onChange={handleModelChange}
           >
-            <MenuItem value="llama2:latest">
+            <MenuItem value="llama3:latest">
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Typography>Default Model</Typography>
               </Box>

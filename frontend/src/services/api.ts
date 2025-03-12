@@ -1,33 +1,38 @@
-import axios from 'axios';
+import axios, { AxiosInstance } from 'axios';
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
-});
-
-export interface Model {
-  id: string;
-  name: string;
-  provider: string;
-}
-
-export interface GenerateDiagramRequest {
-  description: string;
-  type?: string;
-  model?: string;
-  options?: {
+export interface DiagramGenerationOptions {
+    model?: string;
     agent?: {
-      enabled?: boolean;
-      maxIterations?: number;
+        enabled: boolean;
+        max_iterations?: number;
+        temperature?: number;
     };
-    enabled?: boolean;
-  };
+    rag?: {
+        enabled: boolean;
+        api_doc_dir?: string;
+    };
 }
 
-export interface GenerateDiagramResponse {
-  type: string;
-  diagram: string;
-  code?: string;
-  notes: string[];
+export interface DiagramRequest {
+    description: string;
+    syntax_type?: string;  // mermaid, plantuml
+    subtype?: string;      // flowchart, sequence, etc
+    model?: string;
+    options?: DiagramGenerationOptions;
+}
+
+export interface DiagramResponse {
+    code: string;
+    type: string;
+    subtype: string;
+    notes: string[];
+}
+
+export interface SyntaxTypesResponse {
+    syntax: string[];
+    types: {
+        [key: string]: string[];
+    };
 }
 
 export interface LogEntry {
@@ -42,230 +47,134 @@ export interface DiagramApiError {
   details?: any;
 }
 
-// Utility function to extract clean diagram code from potentially verbose LLM responses
-function extractDiagramCode(rawResponse: string): string {
-  // Case 1: Check for mermaid code block syntax
-  const mermaidBlockRegex = /```mermaid\n([\s\S]*?)```/;
-  const mermaidMatch = mermaidBlockRegex.exec(rawResponse);
-  if (mermaidMatch && mermaidMatch[1]) {
-    return mermaidMatch[1].trim();
-  }
-
-  // Case 2: Look for explicit diagram syntax markers
-  const graphLines = rawResponse.split('\n').filter(line => 
-    line.trim().startsWith('graph TD') || 
-    line.trim().startsWith('graph LR') || 
-    line.trim().startsWith('flowchart ') || 
-    line.trim().startsWith('sequenceDiagram') ||
-    line.trim().startsWith('classDiagram')
-  );
-  
-  if (graphLines.length > 0) {
-    // Find the line that starts a diagram
-    const startIndex = rawResponse.indexOf(graphLines[0]);
-    if (startIndex >= 0) {
-      const possibleDiagram = rawResponse.substring(startIndex);
-      const lines = possibleDiagram.split('\n');
-      const diagramLines = [];
-      
-      // Extract lines until we find something that looks like explanatory text
-      for (const line of lines) {
-        const lowerLine = line.toLowerCase().trim();
-        // Stop when we hit explanatory text or descriptive elements
-        if (lowerLine === '' ||
-            lowerLine.startsWith('this diagram') ||
-            lowerLine.startsWith('description:') || 
-            lowerLine.startsWith('here is') ||
-            lowerLine.startsWith('the diagram') ||
-            lowerLine.startsWith('this shows')) {
-          break;
-        }
-        diagramLines.push(line);
-      }
-      
-      return diagramLines.join('\n').trim();
-    }
-  }
-  
-  // Case 3: If the response has a clear structure with diagram code followed by text
-  // Try to identify where the diagram code ends and explanatory text begins
-  const lines = rawResponse.trim().split('\n');
-  const diagramLines = [];
-  let foundExplanatoryText = false;
-  
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    const lowerLine = line.toLowerCase();
-    
-    // Check if this line looks like the start of explanatory text
-    if (i > 0 && (
-        lowerLine.startsWith('this diagram') || 
-        lowerLine.startsWith('this shows') ||
-        lowerLine.startsWith('the diagram') ||
-        lowerLine.startsWith('description:') ||
-        lowerLine.startsWith('here is'))) {
-      foundExplanatoryText = true;
-      break;
-    }
-    
-    // If we find an empty line after some content, and the next non-empty line 
-    // starts with lowercase or is a sentence, assume we've hit explanatory text
-    if (line === '' && diagramLines.length > 0 && i < lines.length - 1) {
-      const nextLine = lines.slice(i + 1).find(l => l.trim() !== '');
-      if (nextLine && 
-          (nextLine.trim()[0] === nextLine.trim()[0].toLowerCase() && 
-           nextLine.trim()[0] !== nextLine.trim()[0].toUpperCase() || // First character is lowercase
-           /^[A-Z][a-z]/.test(nextLine.trim()))) { // Looks like a sentence (capital followed by lowercase)
-        foundExplanatoryText = true;
-        break;
-      }
-    }
-    
-    diagramLines.push(lines[i]);
-  }
-  
-  if (foundExplanatoryText && diagramLines.length > 0) {
-    // Remove any trailing empty lines
-    while (diagramLines.length > 0 && diagramLines[diagramLines.length - 1].trim() === '') {
-      diagramLines.pop();
-    }
-    return diagramLines.join('\n');
-  }
-  
-  // If all else fails, return the raw response as-is
-  return rawResponse.trim();
+export interface ModelInfo {
+    id: string;
+    name: string;
+    provider: string;
+    size: number;
+    digest: string;
 }
 
-export const diagramService = {
-  async generateDiagram(request: GenerateDiagramRequest): Promise<GenerateDiagramResponse> {
-    try {
-      const response = await api.post('/diagrams/generate', request);
-      
-      // Process response to handle verbose LLM responses
-      if (response.data && response.data.diagram) {
-        response.data.diagram = extractDiagramCode(response.data.diagram);
-      }
-      
-      return response.data;
-    } catch (error) {
-      if (axios.isAxiosError(error) && error.response) {
-        throw {
-          error: error.response.data.error || 'Failed to generate diagram',
-          details: error.response.data
-        };
-      }
-      throw {
-        error: 'Failed to connect to the server',
-        details: error
-      };
-    }
-  },
-
-  async requestChanges(diagramId: string, request: GenerateDiagramRequest): Promise<GenerateDiagramResponse> {
-    try {
-      const response = await api.post(`/diagrams/${diagramId}/changes`, request);
-      
-      // Process response to handle verbose LLM responses
-      if (response.data && response.data.diagram) {
-        response.data.diagram = extractDiagramCode(response.data.diagram);
-      }
-      
-      return response.data;
-    } catch (error) {
-      if (axios.isAxiosError(error) && error.response) {
-        throw {
-          error: error.response.data.error || 'Failed to update diagram',
-          details: error.response.data
-        };
-      }
-      throw {
-        error: 'Failed to connect to the server',
-        details: error
-      };
-    }
-  },
-
-  async getLogs(): Promise<LogEntry[]> {
-    try {
-      const response = await api.get('/logs');
-      return response.data;
-    } catch (error) {
-      console.error('Failed to fetch logs:', error);
-      return [];
-    }
-  },
-
-  async log(entry: Omit<LogEntry, 'timestamp'>): Promise<void> {
-    try {
-      await api.post('/logs', entry);
-    } catch (error) {
-      console.error('Failed to log entry:', error);
-    }
-  },
-
-  async getAvailableModels(): Promise<Model[]> {
-    try {
-      const response = await api.get('/ollama/models');
-      return response.data;
-    } catch (error) {
-      console.error('Failed to fetch models:', error);
-      throw error;
-    }
-  },
-
-  async checkHealth(): Promise<boolean> {
-    try {
-      const response = await api.get('/health');
-      return response.data.status === 'healthy';
-    } catch (error) {
-      return false;
-    }
-  }
+const log = (message: string, details?: any) => {
+    console.log(`[API] ${message}`, details);
 };
 
-// Add interceptors to handle raw LLM communication logging
-api.interceptors.request.use(async (config) => {
-  if (config.url?.includes('/diagrams/')) {
-    await diagramService.log({
-      type: 'llm',
-      message: 'LLM Request',
-      details: {
-        url: config.url,
-        method: config.method,
-        data: config.data
-      }
-    });
-  }
-  return config;
+const api: AxiosInstance = axios.create({
+    baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
 });
 
-api.interceptors.response.use(
-  async (response) => {
-    if (response.config.url?.includes('/diagrams/')) {
-      await diagramService.log({
-        type: 'llm',
-        message: 'LLM Response',
-        details: {
-          url: response.config.url,
-          status: response.status,
-          data: response.data
-        }
-      });
+// Add a simple handler to log any API errors
+const handleError = (error: any) => {
+    if (error instanceof axios.AxiosError) {
+        console.error('Failed API request:', error);
+    } else {
+        console.error('Unexpected error:', error);
     }
-    return response;
-  },
-  async (error) => {
-    if (error.config?.url?.includes('/diagrams/')) {
-      await diagramService.log({
-        type: 'error',
-        message: 'API Error',
-        details: {
-          url: error.config.url,
-          error: error.message,
-          response: error.response?.data
-        }
-      });
+};
+
+api.interceptors.request.use((req) => {
+    if (req.url?.includes('/diagrams/')) {
+        log('HTTP request', req.data);
     }
-    throw error;
-  }
-);
+    return req;
+});
+
+api.interceptors.response.use((res) => {
+    log('HTTP response', res.data);
+    return res;
+});
+
+// --------------------------------------------------------------------------
+// API functions & methods
+// --------------------------------------------------------------------------
+
+export const diagramService = {
+    baseUrl: api.defaults.baseURL,
+
+    async generateDiagram(request: DiagramRequest): Promise<DiagramResponse> {
+        try {
+            const response = await api.post<DiagramResponse>(
+                '/diagrams/generate',
+                request
+            );
+            return response.data;
+        } catch (error) {
+            handleError(error);
+            throw error;
+        }
+    },
+
+    async getSyntaxTypes(): Promise<SyntaxTypesResponse> {
+        try {
+            const response = await api.get<SyntaxTypesResponse>(
+                '/diagrams/syntax-types'
+            );
+            return response.data;
+        } catch (error) {
+            handleError(error);
+            throw error;
+        }
+    },
+
+    async getAvailableModels(service: string): Promise<ModelInfo[]> {
+        try {
+            const response = await api.get<ModelInfo[]>(`/${service}/models`);
+            return response.data;
+        } catch (error) {
+            handleError(error);
+            throw error;
+        }
+    },
+
+    async getDiagramById(id: string): Promise<DiagramResponse> {
+        try {
+            const response = await api.get<DiagramResponse>(`/diagrams/${id}`);
+            return response.data;
+        } catch (error) {
+            handleError(error);
+            throw error;
+        }
+    },
+
+    async getAgentIterations(id: string): Promise<number> {
+        try {
+            const response = await api.get<number>(`/diagrams/${id}/iterations`);
+            return response.data;
+        } catch (error) {
+            handleError(error);
+            throw error;
+        }
+    },
+
+    async requestChanges(id: string, request: DiagramRequest): Promise<DiagramResponse> {
+        try {
+            const response = await api.post<DiagramResponse>(
+                `/diagrams/${id}/changes`,
+                request
+            );
+            return response.data;
+        } catch (error) {
+            handleError(error);
+            throw error;
+        }
+    },
+
+    async getLogs(): Promise<LogEntry[]> {
+        try {
+            const response = await api.get<LogEntry[]>('/logs');
+            return response.data;
+        } catch (error) {
+            handleError(error);
+            throw error;
+        }
+    },
+
+    async clearLogs(): Promise<void> {
+        try {
+            await api.delete('/logs');
+        } catch (error) {
+            handleError(error);
+            throw error;
+        }
+    }
+};

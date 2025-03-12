@@ -131,7 +131,7 @@ def start_backend(project_root, port=BACKEND_PORT):
     return process
 
 
-def start_frontend(project_root, port=FRONTEND_PORT):
+def start_frontend(project_root, port=FRONTEND_PORT, backend_port=BACKEND_PORT):
     """Start the frontend development server."""
     if is_port_in_use(port):
         print_color(YELLOW, f"⚠️ Port {port} is already in use. Frontend may already be running.")
@@ -173,6 +173,10 @@ def start_frontend(project_root, port=FRONTEND_PORT):
         
         print_color(GREEN, f"Using npm: {npm_path}")
         
+        # Set environment variable for backend port
+        env = os.environ.copy()
+        env["VITE_API_BASE_URL"] = f"http://localhost:{backend_port}"
+        
         # Run npm command
         process = subprocess.Popen(
             [npm_path, "run", "dev"],
@@ -181,7 +185,8 @@ def start_frontend(project_root, port=FRONTEND_PORT):
             stderr=subprocess.STDOUT,
             universal_newlines=True,
             bufsize=1,
-            shell=True if sys.platform == 'win32' else False
+            shell=True if sys.platform == 'win32' else False,
+            env=env
         )
     except Exception as e:
         print_color(YELLOW, f"Error starting frontend: {str(e)}")
@@ -230,7 +235,7 @@ def main():
         # Start frontend if requested
         frontend_process = None
         if not args.backend_only:
-            frontend_process = start_frontend(project_root, args.frontend_port)
+            frontend_process = start_frontend(project_root, args.frontend_port, args.backend_port)
         
         # Open browser if requested
         if not args.no_browser and frontend_process is not None:
@@ -242,6 +247,7 @@ def main():
             print_color(CYAN, f"- Backend: http://localhost:{args.backend_port}")
         if frontend_process is not None:
             print_color(CYAN, f"- Frontend: http://localhost:{args.frontend_port}")
+            print_color(CYAN, f"- API URL: http://localhost:{args.backend_port}")
         print_color(YELLOW, "\nPress Ctrl+C to stop the servers.\n")
         
         # Monitor processes
