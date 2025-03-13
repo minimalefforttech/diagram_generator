@@ -9,18 +9,19 @@ interface SideBarProps {
   logs: any[];
   onSelectDiagram: (diagramId: string) => void;
   currentDiagramId?: string;
+  historyRef?: React.RefObject<DiagramHistoryRefHandle>;
 }
 
 export const SideBar: React.FC<SideBarProps> = ({ 
   logs, 
   onSelectDiagram, 
-  currentDiagramId
+  currentDiagramId,
+  historyRef
 }) => {
   const [activePanel, setActivePanel] = useState<'logs' | 'history'>('logs');
   const [isExpanded, setIsExpanded] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState('50%');
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const historyRef = useRef<DiagramHistoryRefHandle>(null);
   
   // Update sidebarWidth based on window size
   useEffect(() => {
@@ -41,9 +42,7 @@ export const SideBar: React.FC<SideBarProps> = ({
 
   // Method to refresh the history panel - can be called by parent components
   const refreshHistory = () => {
-    if (historyRef.current) {
-      historyRef.current.refresh();
-    }
+    historyRef?.current?.refresh?.();
   };
 
   return (
@@ -152,15 +151,15 @@ export const SideBar: React.FC<SideBarProps> = ({
 
 // Expose refreshHistory method
 export default React.forwardRef<{ refreshHistory: () => void }, SideBarProps>((props, ref) => {
-  const historyRef = useRef<DiagramHistoryRefHandle>(null);
+  const internalHistoryRef = useRef<DiagramHistoryRefHandle>(null);
 
   React.useImperativeHandle(ref, () => ({
     refreshHistory: () => {
-      if (historyRef.current) {
-        historyRef.current.refresh();
+      if (internalHistoryRef.current) {
+        internalHistoryRef.current.refresh();
       }
     }
   }));
 
-  return <SideBar {...props} />;
+  return <SideBar {...props} historyRef={props.historyRef || internalHistoryRef} />;
 });

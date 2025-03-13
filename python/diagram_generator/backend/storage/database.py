@@ -315,6 +315,9 @@ class Storage:
         Returns:
             List[DiagramRecord]: List of all diagram records
         """
+        # Reload index to ensure we have latest data
+        self.index = self._load_index()
+        
         diagrams = []
         for diagram_id in self.index["diagrams"]:
             diagram = self.get_diagram(diagram_id)
