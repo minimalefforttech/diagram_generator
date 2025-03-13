@@ -15,15 +15,7 @@ import {
 import HistoryIcon from '@mui/icons-material/History';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { diagramService } from '../services/api';
-
-interface DiagramHistoryItem {
-  id: string;
-  createdAt: string;
-  description: string;
-  syntax: string;
-  type: string;
-  iterations?: number;
-}
+import { DiagramHistoryItem } from '../types';
 
 interface DiagramHistoryProps {
   onSelectDiagram: (diagramId: string) => void;

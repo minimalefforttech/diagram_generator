@@ -67,10 +67,11 @@ Rules:
 2. No explanations, markdown formatting, code blocks, or backticks
 3. Keep diagram simple (2-3 nodes with basic connections)
 4. Start directly with valid {diagram_type} syntax
+5. If colors are specified, apply them correctly using {diagram_type} styling syntax
 
 IMPORTANT: Your entire output must be valid {diagram_type} syntax that can be rendered directly.
 """,
-        "fix": """Task: Fix errors in {diagram_type} diagram.
+        "fix": """Task: Fix errors in {diagram_type} diagram or apply styling changes.
 
 Validation Errors:
 {errors}
@@ -83,6 +84,36 @@ Rules:
 2. No explanations or comments
 3. Make minimal changes to fix errors
 4. Ensure syntax is valid for rendering
+5. Preserve all existing elements and connections
+6. If this is a styling request, DO NOT change the diagram structure
+
+For styling in Mermaid diagrams:
+- Add style statements at the end of the diagram
+- Example: style NodeA fill:#1976d2,stroke:#333,color:#fff
+- Example: linkStyle 0 stroke:#d32f2f,stroke-width:2px
+- Example: classDef default fill:#388e3c,stroke:#333,color:#fff
+- Match node IDs exactly as they appear in the diagram
+
+IMPORTANT: Return the complete diagram code with your changes.
+"""
+    }
+
+    # System prompts for different tasks
+    SYSTEM_PROMPTS = {
+        "styling": """You are a specialized diagram styling agent. You modify diagram styling without changing the structure.
+When given a diagram and styling instructions:
+1. Always preserve the original diagram structure and content
+2. Only add or modify style statements
+3. Keep all nodes, connections, and text from the original diagram
+4. Apply styles precisely as requested
+5. Return the complete diagram with styling applied
+
+For Mermaid diagrams, use appropriate styling syntax:
+- Node styling: style NodeName fill:#colorcode,stroke:#colorcode,color:#textcolor
+- Edge styling: linkStyle 0 stroke:#colorcode,stroke-width:2px
+- Class styling: classDef className fill:#colorcode,stroke:#colorcode,color:#textcolor
+
+Never generate a new diagram. Only style the existing one.
 """
     }
 
@@ -454,7 +485,14 @@ Rules:
         
         model = config.model_name if config and config.enabled else self.default_model
         temperature = config.temperature if config and config.enabled else 0.2
-        system = config.system_prompt if config and config.enabled else None
+        
+        # Check if this is a styling request to use specialized system prompt
+        is_styling_request = any(styling_term in " ".join(errors).lower() for styling_term in 
+                               ["style", "color", "fill", "stroke", "theme", "styling", "appearance"])
+        
+        # Use styling system prompt for color/styling requests
+        system = self.SYSTEM_PROMPTS["styling"] if is_styling_request else None
+        system = config.system_prompt if config and config.enabled and config.system_prompt else system
         
         try:
             result = await self.ollama.generate(

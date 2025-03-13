@@ -15,14 +15,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { diagramService } from '../services/api';
 import ThemeToggle from './ThemeToggle';
-
-interface ModelInfo {
-  id: string;
-  name: string;
-  provider: string;
-  size: number;
-  digest: string;
-}
+import { ModelInfo } from '../types';
 
 interface ConfigurationScreenProps {
   onStartDiagramGeneration: (config: {
@@ -33,6 +26,15 @@ interface ConfigurationScreenProps {
   }) => void;
 }
 
+const USER_PREFERENCES_KEY = 'diagramGeneratorPreferences';
+
+// Define the preferences structure
+interface UserPreferences {
+  model?: string;
+  syntax?: string;
+  diagramType?: string;
+}
+
 const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
   onStartDiagramGeneration
 }) => {
@@ -41,6 +43,7 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
   const [syntax, setSyntax] = useState('mermaid');
   const [diagramType, setDiagramType] = useState('auto');
   const [error, setError] = useState<string | null>(null);
+  const [preferences, setPreferences] = useState<UserPreferences>({});
 
   const modelsQuery = useQuery<ModelInfo[]>({
     queryKey: ['models'],
@@ -52,8 +55,55 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
     queryFn: () => diagramService.getSyntaxTypes()
   });
 
+  // Load preferences on component mount
   useEffect(() => {
-    // Reset diagram type when syntax changes
+    try {
+      const savedPrefs = localStorage.getItem(USER_PREFERENCES_KEY);
+      if (savedPrefs) {
+        const parsedPrefs = JSON.parse(savedPrefs) as UserPreferences;
+        setPreferences(parsedPrefs);
+        
+        // Only set syntax and diagram type immediately
+        if (parsedPrefs.syntax) {
+          setSyntax(parsedPrefs.syntax);
+        }
+        if (parsedPrefs.diagramType) {
+          setDiagramType(parsedPrefs.diagramType);
+        }
+        // Model will be set after models are loaded
+      }
+    } catch (error) {
+      console.error('Failed to load preferences:', error);
+    }
+  }, []);
+
+  // Set selected model from preferences after models are loaded
+  useEffect(() => {
+    if (modelsQuery.isSuccess && modelsQuery.data && preferences.model && !selectedModel) {
+      // Check if the saved model is still available
+      const modelExists = modelsQuery.data.some(model => 
+        model.name === preferences.model || model.id === preferences.model
+      );
+      
+      if (modelExists) {
+        setSelectedModel(preferences.model);
+      }
+    }
+  }, [modelsQuery.isSuccess, modelsQuery.data, preferences.model, selectedModel]);
+
+  // Save preferences when they change
+  const savePreferences = (prefs: Partial<UserPreferences>) => {
+    try {
+      const updatedPrefs = { ...preferences, ...prefs };
+      setPreferences(updatedPrefs);
+      localStorage.setItem(USER_PREFERENCES_KEY, JSON.stringify(updatedPrefs));
+    } catch (error) {
+      console.error('Failed to save preferences:', error);
+    }
+  };
+
+  // Reset diagram type when syntax changes
+  useEffect(() => {
     setDiagramType('auto');
   }, [syntax]);
 
@@ -101,10 +151,10 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
       return <MenuItem disabled>Loading syntax types...</MenuItem>;
     } else if (syntaxTypesQuery.isError) {
       return <MenuItem disabled>Error loading syntax types</MenuItem>;
-    } else if (!syntaxTypesQuery.data?.syntax || syntaxTypesQuery.data.syntax.length === 0) {
+    } else if (!syntaxTypesQuery.data?.types || Object.keys(syntaxTypesQuery.data.types).length === 0) {
       return <MenuItem disabled>No syntax types available</MenuItem>;
     } else {
-      return syntaxTypesQuery.data.syntax.map((type: string) => (
+      return Object.keys(syntaxTypesQuery.data.types).map((type: string) => (
         <MenuItem key={type} value={type}>
           {type.charAt(0).toUpperCase() + type.slice(1)}
         </MenuItem>
@@ -162,7 +212,9 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
             value={selectedModel}
             label="Model"
             onChange={(e) => {
-              setSelectedModel(e.target.value);
+              const model = e.target.value;
+              setSelectedModel(model);
+              savePreferences({ model });
               setError(null);
             }}
           >
@@ -177,7 +229,11 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
             labelId="syntax-label"
             value={syntax}
             label="Syntax"
-            onChange={(e) => setSyntax(e.target.value)}
+            onChange={(e) => {
+              const newSyntax = e.target.value;
+              setSyntax(newSyntax);
+              savePreferences({ syntax: newSyntax });
+            }}
           >
             {renderSyntaxMenuItems()}
           </Select>
@@ -190,7 +246,11 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
             labelId="type-label"
             value={diagramType}
             label="Diagram Type"
-            onChange={(e) => setDiagramType(e.target.value)}
+            onChange={(e) => {
+              const newType = e.target.value;
+              setDiagramType(newType);
+              savePreferences({ diagramType: newType });
+            }}
           >
             {renderDiagramTypeMenuItems()}
           </Select>

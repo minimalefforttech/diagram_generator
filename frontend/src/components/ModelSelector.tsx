@@ -10,7 +10,9 @@ import {
   CircularProgress,
 } from '@mui/material';
 import { diagramService } from '../services/api';
-import type { ModelInfo } from '../services/api';
+import type { ModelInfo } from '../types';
+
+const USER_PREFERENCES_KEY = 'diagramGeneratorPreferences';
 
 interface ModelSelectorProps {
   selectedModel: string;
@@ -36,6 +38,28 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
       try {
         const models = await diagramService.getAvailableModels(service);
         setAvailableModels(models);
+        
+        // If no model is selected, try to load from preferences
+        if (!selectedModel) {
+          try {
+            const savedPrefs = localStorage.getItem(USER_PREFERENCES_KEY);
+            if (savedPrefs) {
+              const parsedPrefs = JSON.parse(savedPrefs);
+              if (parsedPrefs.model) {
+                // Check if the saved model is available in the fetched models
+                const modelExists = models.some(model => 
+                  model.name === parsedPrefs.model || model.id === parsedPrefs.model
+                );
+                
+                if (modelExists) {
+                  onModelChange(parsedPrefs.model);
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Failed to load model preference:', error);
+          }
+        }
       } catch (error) {
         setError(`Failed to load models from ${service}`);
         console.error(`Failed to load models from ${service}:`, error);
@@ -45,9 +69,9 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
     };
 
     fetchModels();
-  }, [service]);
+  }, [service, selectedModel, onModelChange]);
 
-  // Separate effect for model selection
+  // Separate effect for model selection when none is selected
   useEffect(() => {
     if (!selectedModel && availableModels.length > 0) {
       onModelChange(availableModels[0].id);
@@ -55,7 +79,18 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
   }, [selectedModel, availableModels, onModelChange]);
 
   const handleModelChange = (event: SelectChangeEvent<string>) => {
-    onModelChange(event.target.value);
+    const newModel = event.target.value;
+    onModelChange(newModel);
+    
+    // Save to preferences
+    try {
+      const savedPrefs = localStorage.getItem(USER_PREFERENCES_KEY);
+      const preferences = savedPrefs ? JSON.parse(savedPrefs) : {};
+      preferences.model = newModel;
+      localStorage.setItem(USER_PREFERENCES_KEY, JSON.stringify(preferences));
+    } catch (error) {
+      console.error('Failed to save model preference:', error);
+    }
   };
 
   // Format model name for display

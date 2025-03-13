@@ -1,27 +1,26 @@
 export interface DiagramState {
   loading: boolean;
-  error?: string;
   code?: string;
+  error?: string;
   id?: string;
 }
 
 export interface LogEntry {
-  type: 'error' | 'llm' | 'info' | string;
-  message: string;
+  id: string;
   timestamp: string;
+  type: string;
+  message: string;
   details?: any;
 }
 
 export interface DiagramGenerationOptions {
-  model?: string;
   agent?: {
     enabled: boolean;
-    max_iterations?: number;
-    temperature?: number;
+    maxIterations?: number;
   };
   rag?: {
     enabled: boolean;
-    api_doc_dir?: string;
+    apiDocDir?: string;
   };
 }
 
@@ -29,25 +28,35 @@ export interface DiagramRequest {
   description: string;
   model?: string;
   syntax?: string;
-  syntax_type?: string;  // mermaid, plantuml
   diagramType?: string;
-  subtype?: string;      // flowchart, sequence, etc
   options?: DiagramGenerationOptions;
 }
 
 export interface DiagramResponse {
-  code: string;
   id?: string;
+  code: string;
   type?: string;
-  subtype?: string;
   notes?: string[];
 }
 
 export interface SyntaxTypesResponse {
-  syntax: string[];
   types: {
-    [key: string]: string[];
-  };
+    id: string;
+    name: string;
+    subtypes: {
+      id: string;
+      name: string;
+    }[];
+  }[];
+}
+
+export interface DiagramHistoryItem {
+  id: string;
+  createdAt: string;
+  description: string;
+  syntax: string;
+  type: string;
+  iterations?: number;
 }
 
 export interface DiagramApiError {

@@ -17,13 +17,22 @@ import {
   SelectChangeEvent,
   Collapse,
   Grid,
-  Tooltip
+  Tooltip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  Card,
+  CardContent,
+  CardHeader
 } from '@mui/material';
 import { LogEntry } from '../types';
 import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import InfoIcon from '@mui/icons-material/Info';
 
 interface OutputLogProps {
   entries: LogEntry[];
@@ -35,6 +44,8 @@ const OutputLog: React.FC<OutputLogProps> = ({ entries, alwaysExpanded = false }
   const [logLevel, setLogLevel] = useState<string>('all');
   const [showFilters, setShowFilters] = useState(false);
   const [expanded, setExpanded] = useState(true);
+  const [selectedEntry, setSelectedEntry] = useState<LogEntry | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const handleLogLevelChange = (event: SelectChangeEvent) => {
     setLogLevel(event.target.value);
@@ -52,6 +63,15 @@ const OutputLog: React.FC<OutputLogProps> = ({ entries, alwaysExpanded = false }
     if (!alwaysExpanded) {
       setExpanded(!expanded);
     }
+  };
+
+  const handleEntryClick = (entry: LogEntry) => {
+    setSelectedEntry(entry);
+    setDetailsOpen(true);
+  };
+
+  const handleCloseDetails = () => {
+    setDetailsOpen(false);
   };
 
   // Filter logs based on search term and level
@@ -82,6 +102,19 @@ const OutputLog: React.FC<OutputLogProps> = ({ entries, alwaysExpanded = false }
         return 'default';
       default:
         return 'default';
+    }
+  };
+
+  // Format details for display
+  const formatDetails = (details: any): string => {
+    if (!details) return 'No details available';
+    
+    if (typeof details === 'string') return details;
+    
+    try {
+      return JSON.stringify(details, null, 2);
+    } catch (e) {
+      return String(details);
     }
   };
 
@@ -188,7 +221,16 @@ const OutputLog: React.FC<OutputLogProps> = ({ entries, alwaysExpanded = false }
           {filteredEntries.length > 0 ? (
             filteredEntries.map((entry, index) => (
               <React.Fragment key={index}>
-                <ListItem>
+                <ListItem 
+                  button 
+                  onClick={() => handleEntryClick(entry)}
+                  sx={{ 
+                    cursor: 'pointer',
+                    '&:hover': {
+                      backgroundColor: 'rgba(255, 255, 255, 0.08)'
+                    }
+                  }}
+                >
                   <ListItemText
                     primary={
                       <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
@@ -207,6 +249,12 @@ const OutputLog: React.FC<OutputLogProps> = ({ entries, alwaysExpanded = false }
                         <Typography variant="body2" sx={{ wordBreak: 'break-word', flexGrow: 1 }}>
                           {entry.message}
                         </Typography>
+                        
+                        {entry.details && (
+                          <Tooltip title="Has details">
+                            <InfoIcon fontSize="small" color="action" />
+                          </Tooltip>
+                        )}
                       </Box>
                     }
                   />
@@ -227,6 +275,65 @@ const OutputLog: React.FC<OutputLogProps> = ({ entries, alwaysExpanded = false }
           )}
         </List>
       </Collapse>
+      
+      {/* Log Details Dialog */}
+      <Dialog
+        open={detailsOpen}
+        onClose={handleCloseDetails}
+        maxWidth="md"
+        fullWidth
+      >
+        {selectedEntry && (
+          <>
+            <DialogTitle>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Chip
+                  label={selectedEntry.type}
+                  size="small"
+                  color={getLevelColor(selectedEntry.type) as any}
+                />
+                <Typography variant="h6">Log Entry Details</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ ml: 'auto' }}>
+                  {new Date(selectedEntry.timestamp).toLocaleString()}
+                </Typography>
+              </Box>
+            </DialogTitle>
+            <DialogContent dividers>
+              <Card variant="outlined" sx={{ mb: 2 }}>
+                <CardHeader title="Message" />
+                <CardContent>
+                  <Typography variant="body1">{selectedEntry.message}</Typography>
+                </CardContent>
+              </Card>
+              
+              {selectedEntry.details && (
+                <Card variant="outlined">
+                  <CardHeader title="Details" />
+                  <CardContent>
+                    <Box
+                      sx={{
+                        backgroundColor: 'background.paper',
+                        p: 2,
+                        borderRadius: 1,
+                        overflow: 'auto',
+                        maxHeight: '400px',
+                        fontFamily: 'monospace',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word'
+                      }}
+                    >
+                      {formatDetails(selectedEntry.details)}
+                    </Box>
+                  </CardContent>
+                </Card>
+              )}
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={handleCloseDetails}>Close</Button>
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
     </Paper>
   );
 };

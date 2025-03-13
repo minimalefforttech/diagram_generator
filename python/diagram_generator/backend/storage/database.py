@@ -92,9 +92,13 @@ class Storage:
         Args:
             diagram: Diagram record to save
         """
+        # Convert diagram to dict and ensure tags is serialized as a list
+        diagram_dict = diagram.model_dump()
+        diagram_dict["tags"] = list(diagram_dict["tags"]) if diagram_dict.get("tags") else []
+        
         # Save diagram data
         diagram_path = self.diagrams_path / f"{diagram.id}.json"
-        diagram_path.write_text(json.dumps(diagram.model_dump(), indent=2, default=str))
+        diagram_path.write_text(json.dumps(diagram_dict, indent=2, default=str))
         
         # Update index
         self.index["diagrams"][diagram.id] = {
@@ -103,7 +107,7 @@ class Storage:
             "created_at": diagram.created_at.isoformat()
         }
         self._save_index()
-        
+
     def get_diagram(self, diagram_id: str) -> Optional[DiagramRecord]:
         """Retrieve a diagram record.
         
@@ -120,10 +124,13 @@ class Storage:
             
         try:
             data = json.loads(diagram_path.read_text())
+            # Convert tags from list back to set if it exists
+            if "tags" in data:
+                data["tags"] = set(data["tags"]) if isinstance(data["tags"], list) else set()
             return DiagramRecord.model_validate(data)
         except Exception as e:
             raise StorageError(f"Failed to load diagram {diagram_id}: {e}")
-            
+
     def save_conversation(self, conversation: ConversationRecord) -> None:
         """Save a conversation record.
         
@@ -278,6 +285,19 @@ class Storage:
         """
         # Just use save_conversation since it handles both create and update
         self.save_conversation(conversation)
+
+    def get_all_diagrams(self) -> List[DiagramRecord]:
+        """Get all diagrams in storage.
+        
+        Returns:
+            List[DiagramRecord]: List of all diagram records
+        """
+        diagrams = []
+        for diagram_id in self.index["diagrams"]:
+            diagram = self.get_diagram(diagram_id)
+            if diagram:
+                diagrams.append(diagram)
+        return diagrams
 
     def save_preferences(self, user_id: str, preferences: Dict[str, Any]) -> None:
         """Save user preferences.

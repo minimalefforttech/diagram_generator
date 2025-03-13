@@ -4,7 +4,8 @@ import {
     DiagramResponse, 
     LogEntry, 
     SyntaxTypesResponse,
-    ModelInfo
+    ModelInfo,
+    DiagramHistoryItem
 } from '../types';
 
 const log = (message: string, details?: any) => {
@@ -80,7 +81,7 @@ export const diagramService = {
 
     async getDiagramById(id: string): Promise<DiagramResponse> {
         try {
-            const response = await api.get<DiagramResponse>(`/diagrams/${id}`);
+            const response = await api.get<DiagramResponse>(`/diagrams/diagram/${id}`);
             return response.data;
         } catch (error) {
             handleError(error);
@@ -90,7 +91,7 @@ export const diagramService = {
 
     async getAgentIterations(id: string): Promise<number> {
         try {
-            const response = await api.get<number>(`/diagrams/${id}/iterations`);
+            const response = await api.get<number>(`/diagrams/diagram/${id}/iterations`);
             return response.data;
         } catch (error) {
             handleError(error);
@@ -100,9 +101,14 @@ export const diagramService = {
 
     async requestChanges(id: string, request: DiagramRequest): Promise<DiagramResponse> {
         try {
+            // Use the generate endpoint with the current diagram ID in the request
+            // This will create a new diagram based on the previous one
             const response = await api.post<DiagramResponse>(
-                `/diagrams/${id}/changes`,
-                request
+                '/diagrams/generate',
+                {
+                    ...request,
+                    previousDiagramId: id
+                }
             );
             return response.data;
         } catch (error) {
@@ -124,6 +130,16 @@ export const diagramService = {
     async clearLogs(): Promise<void> {
         try {
             await api.delete('/logs');
+        } catch (error) {
+            handleError(error);
+            throw error;
+        }
+    },
+
+    async getDiagramHistory(): Promise<DiagramHistoryItem[]> {
+        try {
+            const response = await api.get<DiagramHistoryItem[]>('/diagrams/history');
+            return response.data;
         } catch (error) {
             handleError(error);
             throw error;

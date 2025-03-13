@@ -22,6 +22,7 @@ from .logs import LogEntry, log_service
 # Initialize services
 ollama_service = OllamaService()
 diagram_generator = DiagramGenerator(llm_service=ollama_service)
+storage = Storage()
 
 class ConversationCreateRequest(BaseModel):
     """Request model for creating a new conversation."""
@@ -40,6 +41,25 @@ class ConversationResponse(BaseModel):
 class ContinueConversationRequest(BaseModel):
     """Request model for continuing a conversation."""
     message: str
+
+class DiagramHistoryItem(BaseModel):
+    """Model for diagram history item."""
+    id: str
+    description: str
+    syntax: str
+    createdAt: str
+    iterations: Optional[int] = None
+
+class DiagramResponse(BaseModel):
+    """Response model for a diagram."""
+    id: str
+    code: str
+    type: str
+    subtype: Optional[str] = None
+    description: str
+    createdAt: str
+    metadata: Optional[Dict[str, Any]] = None
+    notes: Optional[List[str]] = None
 
 router = APIRouter(prefix="/diagrams", tags=["diagrams"])
 
@@ -167,3 +187,99 @@ async def get_syntax_types() -> Dict[str, Any]:
             DiagramType.PLANTUML.value: ["sequence", "class", "activity", "component", "state", "mindmap", "gantt"]
         }
     }
+
+@router.get("/history")
+async def get_diagram_history() -> List[DiagramHistoryItem]:
+    """Get the history of all generated diagrams."""
+    try:
+        diagrams = storage.get_all_diagrams()
+        
+        # Convert to response model
+        history_items = []
+        for diagram in diagrams:
+            # Get iterations from metadata if available
+            iterations = diagram.metadata.get("iterations", 0) if diagram.metadata else 0
+            
+            history_items.append(DiagramHistoryItem(
+                id=diagram.id,
+                description=diagram.description[:100] + ("..." if len(diagram.description) > 100 else ""),
+                syntax=diagram.diagram_type,
+                createdAt=diagram.created_at.isoformat(),
+                iterations=iterations
+            ))
+            
+        # Sort by creation date (most recent first)
+        history_items.sort(key=lambda x: x.createdAt, reverse=True)
+        
+        return history_items
+    except Exception as e:
+        error_msg = f"Failed to get diagram history: {str(e)}"
+        log_error(error_msg)
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=error_msg
+        )
+
+@router.get("/diagram/{diagram_id}/iterations")
+async def get_diagram_iterations(diagram_id: str) -> int:
+    """Get the number of iterations for a diagram."""
+    try:
+        diagram = storage.get_diagram(diagram_id)
+        
+        if not diagram:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Diagram with ID {diagram_id} not found"
+            )
+            
+        # Get iterations from metadata if available
+        metadata = diagram.metadata or {}
+        iterations = metadata.get("iterations", 0)
+            
+        return iterations
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = f"Failed to get diagram iterations: {str(e)}"
+        log_error(error_msg)
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=error_msg
+        )
+
+@router.get("/diagram/{diagram_id}")
+async def get_diagram_by_id(diagram_id: str) -> DiagramResponse:
+    """Get diagram by ID."""
+    try:
+        diagram = storage.get_diagram(diagram_id)
+        
+        if not diagram:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Diagram with ID {diagram_id} not found"
+            )
+            
+        # Get iterations from metadata if available
+        metadata = diagram.metadata or {}
+        
+        return DiagramResponse(
+            id=diagram.id,
+            code=diagram.code,
+            type=diagram.diagram_type,
+            description=diagram.description,
+            createdAt=diagram.created_at.isoformat(),
+            metadata=metadata,
+            notes=[]  # Could populate from conversation records if needed
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = f"Failed to get diagram: {str(e)}"
+        log_error(error_msg)
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=error_msg
+        )

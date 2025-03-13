@@ -74,30 +74,94 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     }
   };
 
-  const handlePaletteChange = (palette: DiagramPalette) => {
-    setSelectedPalette(palette);
-    // Send palette change as a message with theme mode context
-    const paletteMessage = `Use this color theme: ${getPaletteColors(palette)} on ${theme.palette.mode} background`;
-    handleSubmitMessage(paletteMessage);
+  const createEnhancedPrompt = (userMessage: string, isStyleChange = false): string => {
+    // Ensure we have proper instructions based on diagram syntax
+    const syntaxType = currentSyntax.toLowerCase();
+    
+    if (!currentDiagram) {
+      return userMessage;
+    }
+
+    // Add current diagram code as context
+    let enhancedPrompt = `Here is the current ${syntaxType} diagram:\n\n${currentDiagram}\n\n`;
+    
+    if (isStyleChange) {
+      // For style changes, use a specific instruction set
+      enhancedPrompt += `IMPORTANT: DO NOT CREATE A NEW DIAGRAM. Apply the requested styling to the EXISTING ${syntaxType} diagram above.\n\n`;
+      enhancedPrompt += `Do ONLY the following actions:\n`;
+      enhancedPrompt += `1. Keep all nodes, connections, and text from the existing diagram exactly as they are\n`;
+      enhancedPrompt += `2. Only add style statements to apply the requested styles\n`;
+      
+      if (syntaxType === 'mermaid') {
+        enhancedPrompt += `3. For nodes, add style statements like: style NodeName fill:#color\n`;
+        enhancedPrompt += `4. For edges, add style statements like: linkStyle 0 stroke:#color\n`;
+      } else if (syntaxType === 'plantuml') {
+        enhancedPrompt += `3. Use skinparam commands for styling\n`;
+        enhancedPrompt += `4. Use color keywords like: #color\n`;
+      }
+      
+      enhancedPrompt += `5. Use contrasting text colors for readability\n\n`;
+      enhancedPrompt += `Remember to preserve ALL existing diagram elements and connections. ONLY add style statements.\n\n`;
+    } else {
+      // For regular changes, use general instructions
+      enhancedPrompt += `Please modify the ${syntaxType} diagram above according to this request:\n\n`;
+    }
+
+    // Add the user's actual request
+    enhancedPrompt += userMessage;
+    
+    return enhancedPrompt;
   };
 
-  const handleSubmitMessage = (messageContent: string) => {
-    if (!selectedModel) {
-      setModelError('Please select a model');
-      return;
-    }
+  const handlePaletteChange = (palette: DiagramPalette) => {
+    setSelectedPalette(palette);
     
+    // Get palette colors
+    const colors = getPaletteColors(palette);
+    const colorMode = theme.palette.mode;
+    
+    // Create a user-friendly message for display
+    const displayMessage = `Apply ${palette} color palette`;
+    
+    // Create the enhanced message with instructions for the backend
+    const paletteMessage = `Apply these colors to the diagram: ${colors} for a ${colorMode} background theme.`;
+    
+    // Store only the user-visible message in chat history
+    addMessageToHistory(displayMessage);
+    
+    // Send the enhanced message to the backend
+    if (selectedModel && currentDiagram) {
+      onRequestChanges(createEnhancedPrompt(paletteMessage, true), selectedModel);
+    }
+  };
+
+  const addMessageToHistory = (displayContent: string) => {
     const newMessage = {
       role: 'user' as const,
-      content: messageContent,
+      content: displayContent,
       timestamp: new Date().toISOString(),
       model: selectedModel,
     };
 
     setMessages([...messages, newMessage]);
+  };
+
+  const handleSubmitMessage = (userMessage: string) => {
+    if (!selectedModel) {
+      setModelError('Please select a model');
+      return;
+    }
+    
+    // Add user message to chat history (without the enhanced prompt)
+    addMessageToHistory(userMessage);
     
     if (currentDiagram) {
-      onRequestChanges(messageContent, selectedModel);
+      // Send the enhanced prompt to the backend
+      const enhancedPrompt = createEnhancedPrompt(userMessage);
+      onRequestChanges(enhancedPrompt, selectedModel);
+    } else {
+      // If no diagram exists yet, send the message as-is
+      onRequestChanges(userMessage, selectedModel);
     }
   };
 
@@ -121,8 +185,16 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     if (onSyntaxChange) {
       onSyntaxChange(syntax);
     }
-    // Send syntax change as a message
-    handleSubmitMessage(`Change diagram syntax to: ${syntax}`);
+    
+    // Add a user-friendly message to the chat
+    const displayMessage = `Change diagram syntax to: ${syntax}`;
+    addMessageToHistory(displayMessage);
+    
+    // Create enhanced message for the backend
+    if (currentDiagram) {
+      const enhancedPrompt = `Convert the current diagram to ${syntax} syntax while preserving all elements and relationships.`;
+      onRequestChanges(createEnhancedPrompt(enhancedPrompt), selectedModel);
+    }
   };
 
   const handleTypeChange = (type: string) => {
@@ -130,8 +202,16 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     if (onTypeChange) {
       onTypeChange(type);
     }
-    // Send type change as a message
-    handleSubmitMessage(`Change diagram type to: ${type}`);
+    
+    // Add a user-friendly message to the chat
+    const displayMessage = `Change diagram type to: ${type}`;
+    addMessageToHistory(displayMessage);
+    
+    // Create enhanced message for the backend
+    if (currentDiagram) {
+      const enhancedPrompt = `Convert the current diagram to a ${type} diagram while preserving the core information.`;
+      onRequestChanges(createEnhancedPrompt(enhancedPrompt), selectedModel);
+    }
   };
 
   return (
