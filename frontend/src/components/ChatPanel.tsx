@@ -51,7 +51,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   const [selectedPalette, setSelectedPalette] = useState<DiagramPalette>('greyscale');
   const [currentSyntax, setCurrentSyntax] = useState('mermaid');
   const [currentType, setCurrentType] = useState('auto');
-  const [settingsExpanded, setSettingsExpanded] = useState(true);
+  const [settingsExpanded, setSettingsExpanded] = useState(false);
 
   const toggleSettings = () => {
     setSettingsExpanded(!settingsExpanded);
@@ -212,13 +212,15 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   };
 
   return (
-    <Paper sx={{ 
+    <Paper sx={(theme) => ({
       flexGrow: 1,
-      minHeight: 0,
       display: 'flex',
       flexDirection: 'column',
-      overflow: 'hidden'
-    }}>
+      overflow: 'hidden',
+      height: '100%',
+      bgcolor: theme.palette.background.paper
+    })}>
+      {/* Settings Header */}
       <Box sx={{ 
         p: 1.5, 
         borderBottom: 1, 
@@ -246,6 +248,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         </IconButton>
       </Box>
 
+      {/* Settings Panel */}
       <Collapse in={settingsExpanded}>
         <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0, bgcolor: 'background.paper' }}>
           <DiagramTypeSelector
@@ -254,12 +257,10 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
             onSyntaxChange={handleSyntaxChange}
             onTypeChange={handleTypeChange}
           />
-
           <PaletteSelector
             selectedPalette={selectedPalette}
             onChange={handlePaletteChange}
           />
-
           <ModelSelector
             selectedModel={selectedModel}
             onModelChange={handleModelChange}
@@ -269,30 +270,38 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
       <Divider />
 
-      {/* Messages List */}
-      <List sx={{ 
-        flexGrow: 1, 
-        overflow: 'auto', 
-        px: 2,
-        py: 1,
-        minHeight: 0,
-        bgcolor: (theme) => theme.palette.mode === 'dark' ? 'background.default' : 'grey.50',
-        scrollbarWidth: 'thin',
-        '&::-webkit-scrollbar': {
-          width: '8px',
-        },
-        '&::-webkit-scrollbar-thumb': {
-          backgroundColor: 'rgba(255, 255, 255, 0.2)',
-          borderRadius: '4px',
-        }
+      {/* Messages Area */}
+      <Box sx={{
+        flexGrow: 1,
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'flex-end',
+        minHeight: 0
       }}>
-        {messages.map((msg, index) => (
-          <React.Fragment key={index}>
+        <List sx={{ 
+          flexGrow: 1,
+          overflow: 'auto',
+          minHeight: 0,
+          px: 2,
+          py: messages.length > 0 ? 1 : 0,
+          bgcolor: 'transparent',
+          scrollbarWidth: 'thin',
+          '&::-webkit-scrollbar': {
+            width: '8px',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            backgroundColor: 'rgba(128, 128, 128, 0.3)',
+            borderRadius: '4px',
+          }
+        }}>
+          {messages.map((msg, index) => (
             <ListItem
+              key={index}
               alignItems="flex-start"
               sx={{
                 flexDirection: msg.role === 'user' ? 'row-reverse' : 'row',
-                mb: 1,
+                py: 0.5,
               }}
             >
               <ListItemText
@@ -343,32 +352,32 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
                 }
               />
             </ListItem>
-            {index < messages.length - 1 && <Divider sx={{ my: 1 }} />}
-          </React.Fragment>
-        ))}
-      </List>
+          ))}
+        </List>
 
-      {/* Error Alert */}
-      {modelError && (
-        <Box sx={{ px: 2, py: 1, flexShrink: 0, bgcolor: 'background.paper' }}>
-          <Alert severity="error" onClose={() => setModelError(null)}>
-            {modelError}
-          </Alert>
-        </Box>
-      )}
+        {/* Error Alert */}
+        {modelError && (
+          <Box sx={{ px: 2, py: 1, bgcolor: 'background.paper' }}>
+            <Alert severity="error" onClose={() => setModelError(null)}>
+              {modelError}
+            </Alert>
+          </Box>
+        )}
+      </Box>
 
       {/* Chat Input */}
-      <Box 
+      <Box
         component="form"
         onSubmit={handleSubmit}
         sx={{
-          p: 2,
+          p: 1.5,
           display: 'flex',
           gap: 1,
           borderTop: 1,
           borderColor: 'divider',
           bgcolor: 'background.paper',
           flexShrink: 0,
+          alignItems: 'flex-start'
         }}
       >
         <TextField
@@ -391,7 +400,11 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
             type="submit"
             variant="contained"
             disabled={!canSubmit}
-            sx={{ alignSelf: 'stretch' }}
+            sx={{ 
+              minWidth: '100px',
+              height: '40px',
+              alignSelf: 'flex-start'  // Align with first line of text field
+            }}
             endIcon={<SendIcon />}
             onClick={() => handleSubmit()}
           >

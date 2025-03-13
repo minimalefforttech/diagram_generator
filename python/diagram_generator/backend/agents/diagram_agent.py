@@ -13,13 +13,12 @@ from pydantic import BaseModel, Field, ConfigDict, model_validator
 from diagram_generator.backend.models.configs import AgentConfig, DiagramGenerationOptions
 from diagram_generator.backend.models.ollama import OllamaAPI, ErrorResponse
 from diagram_generator.backend.storage.database import Storage, DiagramRecord, ConversationRecord, ConversationMessage
-from diagram_generator.backend.utils.caching import DiagramCache
 from diagram_generator.backend.utils.rag import RAGProvider
 from diagram_generator.backend.utils.diagram_validator import DiagramValidator, ValidationResult, DiagramType
 
 logger = logging.getLogger(__name__)
 
-# New Pydantic models for the agent
+# Pydantic models for the agent
 class DiagramAgentState(BaseModel):
     """Represents the state of the diagram agent."""
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -128,14 +127,10 @@ Never generate a new diagram. Only style the existing one.
         self,
         base_url: str = "http://localhost:11434",
         default_model: str = "llama3.1:8b",
-        cache_dir: str = ".cache/diagrams",
-        cache_ttl: Optional[float] = 3600,  # 1 hour default TTL
         storage: Optional[Storage] = None
     ):
         """Initialize DiagramAgent."""
         self.default_model = default_model
-        self.cache_ttl = cache_ttl
-        self.cache = DiagramCache(cache_dir=cache_dir)
         self.storage = storage or Storage()
         self.ollama = OllamaAPI(base_url=base_url)
         self.logger = logging.getLogger(__name__)
@@ -258,7 +253,6 @@ Never generate a new diagram. Only style the existing one.
         # Just return the cleaned content
         return raw_content.replace("```mermaid", "").replace("```plantuml", "").replace("```", "").strip()
 
-    # New agent lifecycle methods
     def _init_state(self, input_data: DiagramAgentInput) -> DiagramAgentState:
         """Initialize agent state from input."""
         # Convert string diagram type to enum
@@ -423,22 +417,12 @@ Never generate a new diagram. Only style the existing one.
 
         self.logger.info(f"Generating {diagram_type} diagram for: {description}")
 
-        # Check cache first
+        # Get RAG context if enabled
         context_section = ""
         if rag_provider and options.rag.enabled:
             context = rag_provider.get_relevant_context(description)
             if context:
                 context_section = f"Use this API context:\n{context}\n\n"
-
-        cache_entry = self.cache.get(
-            description=description,
-            diagram_type=diagram_type,
-            rag_context=context_section if context_section else None
-        )
-
-        if cache_entry:
-            self.logger.info("Using cached diagram")
-            return cache_entry.value, ["Using cached diagram"]
 
         # Create agent input
         input_data = DiagramAgentInput(
@@ -450,16 +434,6 @@ Never generate a new diagram. Only style the existing one.
 
         # Run the agent
         output = await self.run_agent(input_data)
-
-        # Cache successful generation
-        if output.valid:
-            self.cache.set(
-                description=description,
-                diagram_type=diagram_type,
-                value=output.code,
-                ttl=self.cache_ttl,
-                rag_context=context_section if context_section else None
-            )
 
         return output.code, output.notes
 
