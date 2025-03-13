@@ -31,7 +31,9 @@ export interface LogEntry {
 
 export interface SyntaxTypesResponse {
     syntax: string[];
-    types: Record<string, string[]>;
+    types: {
+        [key: string]: string[];
+    };
 }
 
 export interface ModelInfo {

@@ -12,14 +12,14 @@ logger = logging.getLogger(__name__)
 
 class LogEntry(BaseModel):
     """Model for log entries."""
-    type: Literal["error", "llm", "info"]
+    type: str
     message: str
     timestamp: str
     details: Optional[Any] = None
 
 class CreateLogRequest(BaseModel):
     """Request model for creating a log entry."""
-    type: Literal["error", "llm", "info"]
+    type: str
     message: str
     details: Optional[Any] = None
 
@@ -43,6 +43,10 @@ class LogService:
         )
         self.log_entries.append(entry)
         return entry
+        
+    def clear_logs(self) -> None:
+        """Clear all log entries."""
+        self.log_entries.clear()
 
 # Create a singleton instance
 log_service = LogService()
@@ -75,3 +79,9 @@ async def create_log(request: CreateLogRequest):
         message=request.message,
         details=request.details
     )
+
+@router.delete("")
+async def clear_logs():
+    """Clear all log entries."""
+    log_service.clear_logs()
+    return {"status": "success", "message": "All logs cleared"}

@@ -1,24 +1,26 @@
-import { loader } from '@monaco-editor/react';
+import { loader } from "@monaco-editor/react";
 
-// Define language configurations for Monaco editor
-export const configureMonacoEditor = (isDarkMode = true) => {
+export const configureMonacoEditor = (darkMode: boolean = false) => {
   loader.init().then((monaco) => {
     // Register Mermaid language
     monaco.languages.register({ id: 'mermaid' });
     monaco.languages.setMonarchTokensProvider('mermaid', {
       tokenizer: {
         root: [
-          [/^(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|mindmap|timeline)/, 'keyword'],
-          [/[{}[\]]/, 'delimiter'],
-          [/[<>]+/, 'angle'],
+          [/[\{\[\(\}\]\)]/, 'delimiter'],
+          [/[A-Z][a-zA-Z0-9_$]*/, 'type'],
           [/".*?"/, 'string'],
           [/'.*?'/, 'string'],
-          [/-->|==>|-.->|===>|-.->/, 'arrow'],
-          [/\|[\w\s]*\|/, 'actor'],
-          [/\[[^\]]*\]/, 'square-bracket'],
-          [/\([^)]*\)/, 'parenthesis'],
-          [/style\s+\w+/, 'style'],
-          [/class\s+\w+/, 'class'],
+          [/(%%).*$/, 'comment'],
+          [/---/, 'keyword'],
+          [/--?>/, 'keyword'],
+          [/===>/, 'keyword'],
+          [/-\.->/, 'keyword'],
+          [/==>/, 'keyword'],
+          [/-->/, 'keyword'],
+          [/->/, 'keyword'],
+          [/graph\s+(TB|BT|RL|LR|TD)/, 'keyword'],
+          [/\b(subgraph|end|style|classDef|linkStyle|class)\b/, 'keyword'],
           [/\b(participant|actor|boundary|control|entity|database)\b/, 'keyword'],
           [/#[\da-fA-F]{3,6}/, 'color'],
           [/\b(fill|stroke|color|background)\b/, 'style-prop'],
@@ -31,81 +33,120 @@ export const configureMonacoEditor = (isDarkMode = true) => {
     monaco.languages.setMonarchTokensProvider('plantuml', {
       tokenizer: {
         root: [
-          [/@start(uml|mindmap|wbs|gantt|salt)/, 'keyword'],
-          [/@end(uml|mindmap|wbs|gantt|salt)/, 'keyword'],
+          // Special tag handling
+          [/(@(?:start|end))(uml|mindmap|wbs|gantt|salt)/, ['keyword', 'type']],
+          
+          // Declarations
           [/\b(class|interface|enum|abstract|package|namespace)\b/, 'keyword'],
           [/\b(actor|boundary|control|entity|database|collections)\b/, 'keyword'],
+          [/\b(private|protected|public)\b/, 'keyword'],
+          
+          // Delimiters and operators
           [/[{}[\]]/, 'delimiter'],
           [/".*?"/, 'string'],
           [/'.*?'/, 'string'],
-          [/-[->]+|<[=-]+|=[=>]+/, 'arrow'],
-          [/:[^:]+:/, 'stereotype'],
-          [/\b(public|private|protected|static|final)\b/, 'modifier'],
+          [/!.*$/, 'comment'],
+          [/'.*$/, 'comment'],
+          
+          // Arrows and connections
+          [/<-[-.]+>/, 'keyword'],
+          [/-[-.]+>/, 'keyword'],
+          [/<[-.]+-/, 'keyword'],
+          [/[<>*#]+/, 'operator'],
+          
+          // Commands and styling
+          [/\b(skinparam|title|header|footer|note|legend)\b/, 'keyword'],
+          [/\b(left|right|top|bottom|of|on|style)\b/, 'keyword'],
+          
+          // Colors and styling properties
           [/#[\da-fA-F]{3,6}/, 'color'],
-          [/\b(skinparam|style)\b/, 'style'],
+          [/\b(BackgroundColor|BorderColor|FontColor|FontSize|FontStyle)\b/, 'style-prop'],
+          
+          // Additional PlantUML keywords
+          [/\b(start|stop|if|else|endif|fork|join|split|end)\b/, 'keyword'],
+          [/:[^:]+:/, 'string'],  // Activity labels
+          [/(?:<<).+?(?:>>)/, 'type'],  // Stereotypes
+          [/\b(?:\d+\.?\d*(?:ms|s|m|h|d|w|M|y))\b/, 'number'],  // Time units
+          [/[-+]?(?:\d*\.)?\d+/, 'number'],  // Numbers
         ],
       },
     });
 
-    // Configure light theme
+    // Create light and dark themes for both languages
     monaco.editor.defineTheme('mermaidLight', {
       base: 'vs',
       inherit: true,
       rules: [
-        { token: 'keyword', foreground: '0D47A1', fontStyle: 'bold' },
-        { token: 'arrow', foreground: '1976D2' },
-        { token: 'actor', foreground: '00695C' },
-        { token: 'string', foreground: '2E7D32' },
-        { token: 'style', foreground: '9C27B0' },
-        { token: 'style-prop', foreground: '0277BD' },
-        { token: 'color', foreground: '2E7D32' },
+        { token: 'keyword', foreground: '0000FF', fontStyle: 'bold' },
+        { token: 'string', foreground: 'A31515' },
+        { token: 'comment', foreground: '008000', fontStyle: 'italic' },
+        { token: 'type', foreground: '267F99' },
         { token: 'delimiter', foreground: '000000' },
-        { token: 'class', foreground: '00695C' },
+        { token: 'style-prop', foreground: 'AF00DB' },
+        { token: 'color', foreground: 'B21919' },
       ],
       colors: {
-        'editor.background': '#FFFFFF',
         'editor.foreground': '#000000',
-        'editorLineNumber.foreground': '#6E6E6E',
-        'editorLineNumber.activeForeground': '#000000',
-        'editor.selectionBackground': '#ADD6FF',
-        'editor.inactiveSelectionBackground': '#E5EBF1',
-        'editor.lineHighlightBackground': '#F5F5F5',
-        'editorCursor.foreground': '#000000',
-        'editorWhitespace.foreground': '#BFBFBF',
-        'editorIndentGuide.background': '#D3D3D3'
-      },
+        'editor.background': '#FFFFFF',
+      }
     });
 
-    // Configure dark theme
+    monaco.editor.defineTheme('plantumlLight', {
+      base: 'vs',
+      inherit: true,
+      rules: [
+        { token: 'keyword', foreground: '0000FF', fontStyle: 'bold' },
+        { token: 'string', foreground: 'A31515' },
+        { token: 'comment', foreground: '008000', fontStyle: 'italic' },
+        { token: 'type', foreground: '4EC9B0' },
+        { token: 'operator', foreground: 'CF1010' },
+        { token: 'delimiter', foreground: '000000' },
+        { token: 'style-prop', foreground: 'AF00DB' },
+        { token: 'color', foreground: 'B21919' },
+        { token: 'number', foreground: '098658' },
+      ],
+      colors: {
+        'editor.foreground': '#000000',
+        'editor.background': '#FFFFFF',
+      }
+    });
+
     monaco.editor.defineTheme('mermaidDark', {
       base: 'vs-dark',
       inherit: true,
       rules: [
         { token: 'keyword', foreground: '569CD6', fontStyle: 'bold' },
-        { token: 'arrow', foreground: '569CD6' },
-        { token: 'actor', foreground: '4EC9B0' },
         { token: 'string', foreground: 'CE9178' },
-        { token: 'style', foreground: 'C586C0' },
-        { token: 'style-prop', foreground: '9CDCFE' },
-        { token: 'color', foreground: 'CE9178' },
-        { token: 'delimiter', foreground: 'D4D4D4' },
-        { token: 'class', foreground: '4EC9B0' },
+        { token: 'comment', foreground: '6A9955', fontStyle: 'italic' },
+        { token: 'type', foreground: '4EC9B0' },
+        { token: 'delimiter', foreground: 'FFFFFF' },
+        { token: 'style-prop', foreground: 'C586C0' },
+        { token: 'color', foreground: 'D16969' },
       ],
       colors: {
-        'editor.background': '#1E1E1E',
         'editor.foreground': '#D4D4D4',
-        'editorLineNumber.foreground': '#858585',
-        'editorLineNumber.activeForeground': '#C6C6C6',
-        'editor.selectionBackground': '#264F78',
-        'editor.inactiveSelectionBackground': '#3A3D41',
-        'editor.lineHighlightBackground': '#2D2D2D',
-        'editorCursor.foreground': '#AEAFAD',
-        'editorWhitespace.foreground': '#404040',
-        'editorIndentGuide.background': '#404040'
-      },
+        'editor.background': '#1E1E1E',
+      }
     });
 
-    // Set the active theme based on mode
-    monaco.editor.setTheme(isDarkMode ? 'mermaidDark' : 'mermaidLight');
+    monaco.editor.defineTheme('plantumlDark', {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [
+        { token: 'keyword', foreground: '569CD6', fontStyle: 'bold' },
+        { token: 'string', foreground: 'CE9178' },
+        { token: 'comment', foreground: '6A9955', fontStyle: 'italic' },
+        { token: 'type', foreground: '4EC9B0' },
+        { token: 'operator', foreground: 'FF6B6B' },
+        { token: 'delimiter', foreground: 'FFFFFF' },
+        { token: 'style-prop', foreground: 'C586C0' },
+        { token: 'color', foreground: 'D16969' },
+        { token: 'number', foreground: 'B5CEA8' },
+      ],
+      colors: {
+        'editor.foreground': '#D4D4D4',
+        'editor.background': '#1E1E1E',
+      }
+    });
   });
 };

@@ -206,7 +206,30 @@ class Storage:
             return True
         except Exception:
             return False
+
+    def clear_diagrams(self) -> None:
+        """Clear all diagram records and associated conversations."""
+        try:
+            # Get all diagram IDs first
+            diagram_ids = list(self.index["diagrams"].keys())
             
+            # Delete each diagram and its associated conversations
+            for diagram_id in diagram_ids:
+                # Delete associated conversations first
+                conv_ids = self.get_diagram_history(diagram_id)
+                for conv_id in conv_ids:
+                    self.delete_conversation(conv_id)
+                
+                # Then delete the diagram
+                self.delete_diagram(diagram_id)
+            
+            # Clear index entries
+            self.index["diagrams"].clear()
+            self._save_index()
+            
+        except Exception as e:
+            raise StorageError(f"Failed to clear diagrams: {str(e)}")
+
     def search_diagrams(
         self,
         diagram_type: Optional[str] = None,

@@ -4,16 +4,19 @@ import {
   Paper, 
   Typography, 
   CircularProgress, 
-  Divider,
   Button,
   useTheme,
   Menu,
   MenuItem,
+  IconButton,
 } from '@mui/material';
 import { 
   Code as CodeIcon, 
   BubbleChart as BubbleChartIcon,
-  Download as DownloadIcon 
+  Download as DownloadIcon,
+  ZoomIn as ZoomInIcon,
+  ZoomOut as ZoomOutIcon,
+  RestartAlt as ResetIcon
 } from '@mui/icons-material';
 import Editor from "@monaco-editor/react";
 import mermaid from 'mermaid';
@@ -50,6 +53,10 @@ const DiagramPanel: React.FC<DiagramPanelProps> = ({
   const [editorValue, setEditorValue] = useState<string>('');
   const [currentSyntax, setCurrentSyntax] = useState<string>('mermaid');
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [scale, setScale] = useState(1);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
   // Simplified editor mount handler - always use light theme
   const handleEditorWillMount = (monaco: any) => {
@@ -107,24 +114,23 @@ const DiagramPanel: React.FC<DiagramPanelProps> = ({
   // Render diagram when code changes or when showCodeEditor changes
   useEffect(() => {
     const renderDiagram = async () => {
-      // Only skip rendering if we're explicitly showing the code editor
-      // This allows the diagram to render on first load and when switching back to diagram view
-      if (!diagramRef.current || !code || (showCodeEditor === true)) return;
+      if (!code || showCodeEditor) return;
 
       try {
         setRenderError(null);
-        diagramRef.current.innerHTML = '';
 
         if (currentSyntax === 'mermaid') {
+          // Initialize Mermaid with dynamic config
           await mermaid.initialize({
             startOnLoad: false,
-            theme: 'dark',
+            theme: theme.palette.mode === 'dark' ? 'dark' : 'default',
             securityLevel: 'loose',
           });
 
           const { svg } = await mermaid.render('diagram', code);
           diagramRef.current.innerHTML = svg;
         }
+        // PlantUML rendering is handled by PlantUMLViewer component
       } catch (err) {
         console.error('Failed to render diagram:', err);
         setRenderError(err instanceof Error ? err.message : 'Failed to render diagram');
@@ -132,7 +138,7 @@ const DiagramPanel: React.FC<DiagramPanelProps> = ({
     };
 
     renderDiagram();
-  }, [code, currentSyntax, showCodeEditor]); // Include all dependencies that should trigger a re-render
+  }, [code, currentSyntax, showCodeEditor, theme.palette.mode]);
 
   const handleDownloadClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     setAnchorEl(event.currentTarget);
@@ -142,37 +148,89 @@ const DiagramPanel: React.FC<DiagramPanelProps> = ({
     setAnchorEl(null);
   };
 
-  const downloadAsPNG = () => {
-    if (!diagramRef.current) return;
-    const svg = diagramRef.current.querySelector('svg');
-    if (!svg) return;
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button === 0) { // Left click only
+      setIsDragging(true);
+      setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
+    }
+  };
 
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    const image = new Image();
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isDragging) {
+      setPosition({
+        x: e.clientX - dragStart.x,
+        y: e.clientY - dragStart.y
+      });
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = -e.deltaY;
+    const scaleFactor = 0.1;
+    const newScale = scale + (delta > 0 ? scaleFactor : -scaleFactor);
     
-    const svgData = new XMLSerializer().serializeToString(svg);
-    const blob = new Blob([svgData], { type: 'image/svg+xml' });
-    const url = URL.createObjectURL(blob);
+    // Limit scale between 0.1 and 3
+    setScale(Math.min(Math.max(0.1, newScale), 3));
+  };
 
-    image.onload = () => {
-      canvas.width = image.width;
-      canvas.height = image.height;
-      ctx?.drawImage(image, 0, 0);
+  const resetView = () => {
+    setScale(1);
+    setPosition({ x: 0, y: 0 });
+  };
+
+  const zoomIn = () => {
+    setScale(Math.min(scale + 0.1, 3));
+  };
+
+  const zoomOut = () => {
+    setScale(Math.max(scale - 0.1, 0.1));
+  };
+
+  const downloadAsSVG = () => {
+    // Handle Mermaid diagrams directly from the DOM
+    if (currentSyntax === 'mermaid' && diagramRef.current) {
+      const svg = diagramRef.current.querySelector('svg');
+      if (!svg) return;
       
-      canvas.toBlob((blob) => {
-        if (blob) {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = 'diagram.png';
-          a.click();
-          URL.revokeObjectURL(url);
-        }
-      }, 'image/png');
-    };
+      // Create a clean SVG with proper XML namespaces
+      const svgData = new XMLSerializer().serializeToString(svg);
+      const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(svgBlob);
+      
+      // Create download link
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `diagram-${currentSyntax}.svg`;
+      a.click();
+      
+      // Clean up
+      URL.revokeObjectURL(url);
+    } 
+    // For PlantUML, get the SVG directly from the server
+    else if (currentSyntax === 'plantuml' && code) {
+      try {
+        const plantumlEncoder = require('plantuml-encoder');
+        const encodedCode = plantumlEncoder.encode(code);
+        
+        // Use public PlantUML server or configured server URL from environment
+        const serverUrl = process.env.REACT_APP_PLANTUML_SERVER || 'https://www.plantuml.com/plantuml';
+        const svgUrl = `${serverUrl}/svg/${encodedCode}`;
+        
+        // Create download link
+        const a = document.createElement('a');
+        a.href = svgUrl;
+        a.download = `diagram-${currentSyntax}.svg`;
+        a.click();
+      } catch (err) {
+        console.error('Error downloading PlantUML SVG:', err);
+      }
+    }
     
-    image.src = url;
     handleDownloadClose();
   };
 
@@ -188,31 +246,41 @@ const DiagramPanel: React.FC<DiagramPanelProps> = ({
     handleDownloadClose();
   };
 
+  const handleEditorChange = (value: string | undefined) => {
+    setEditorValue(value || '');
+    onCodeChange?.(value || '');
+  };
+
   return (
-    <Paper
-      sx={{
-        flexGrow: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        minHeight: 0,
-        p: 2,
-        position: 'relative',
-        bgcolor: theme.palette.mode === 'dark' ? '#1E1E1E' : '#FFFFFF',
-      }}
-    >
+    <Paper sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ mb: 2, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={showCodeEditor ? 
-            <BubbleChartIcon /> : 
-            <CodeIcon />
-          }
-          onClick={() => onToggleCodeEditor?.()}
-        >
-          {showCodeEditor ? "Show Diagram" : "Show Code"}
-        </Button>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={showCodeEditor ? 
+              <BubbleChartIcon /> : 
+              <CodeIcon />
+            }
+            onClick={() => onToggleCodeEditor?.()}
+          >
+            {showCodeEditor ? "Show Diagram" : "Show Code"}
+          </Button>
+
+          {!showCodeEditor && code && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <IconButton size="small" onClick={zoomOut} title="Zoom out">
+                <ZoomOutIcon />
+              </IconButton>
+              <IconButton size="small" onClick={resetView} title="Reset view">
+                <ResetIcon />
+              </IconButton>
+              <IconButton size="small" onClick={zoomIn} title="Zoom in">
+                <ZoomInIcon />
+              </IconButton>
+            </Box>
+          )}
+        </Box>
         
         {!showCodeEditor && code && (
           <>
@@ -229,15 +297,13 @@ const DiagramPanel: React.FC<DiagramPanelProps> = ({
               open={Boolean(anchorEl)}
               onClose={handleDownloadClose}
             >
-              <MenuItem onClick={downloadAsPNG}>Download as PNG</MenuItem>
+              <MenuItem onClick={downloadAsSVG}>Download as SVG</MenuItem>
               <MenuItem onClick={downloadAsMarkdown}>Download as Markdown</MenuItem>
             </Menu>
           </>
         )}
       </Box>
 
-      <Divider sx={{ mb: 2, flexShrink: 0 }} />
-      
       {loading && (
         <Box
           sx={{
@@ -274,25 +340,12 @@ const DiagramPanel: React.FC<DiagramPanelProps> = ({
       )}
 
       {showCodeEditor ? (
-        <Box sx={{ 
-          flexGrow: 1, 
-          minHeight: 0,
-          bgcolor: '#FFFFFF',
-          '& .monaco-editor, & .monaco-editor .margin, & .monaco-editor-background': {
-            backgroundColor: '#FFFFFF !important'
-          }
-        }}>
+        <Box sx={{ flexGrow: 1, minHeight: 0, overflow: 'hidden' }}>
           <Editor
             height="100%"
-            defaultValue={editorValue}
+            defaultLanguage={currentSyntax === 'mermaid' ? 'mermaid' : 'plantuml'}
             value={editorValue}
-            onChange={(value: string | undefined) => {
-              setEditorValue(value || '');
-              onCodeChange?.(value || '');
-            }}
-            language={currentSyntax === 'mermaid' ? 'mermaid' : 'plantuml'}
-            beforeMount={handleEditorWillMount}
-            theme="mermaidLight"
+            onChange={handleEditorChange}
             options={{
               minimap: { enabled: false },
               fontSize: 14,
@@ -334,20 +387,18 @@ const DiagramPanel: React.FC<DiagramPanelProps> = ({
           sx={{
             flexGrow: 1,
             minHeight: 0,
-            overflow: 'auto',
+            overflow: 'hidden',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            scrollbarWidth: 'thin',
-            '&::-webkit-scrollbar': {
-              width: '8px',
-              height: '8px'
-            },
-            '&::-webkit-scrollbar-thumb': {
-              backgroundColor: 'rgba(255, 255, 255, 0.2)',
-              borderRadius: '4px',
-            }
+            position: 'relative',
+            cursor: isDragging ? 'grabbing' : 'grab',
           }}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+          onWheel={handleWheel}
         >
           {currentSyntax === 'mermaid' ? (
             <Box
@@ -361,17 +412,26 @@ const DiagramPanel: React.FC<DiagramPanelProps> = ({
                 alignItems: 'center',
                 justifyContent: 'center',
                 padding: 2,
+                transform: `scale(${scale}) translate(${position.x}px, ${position.y}px)`,
+                transition: isDragging ? 'none' : 'transform 0.1s ease-out',
                 '& svg': {
                   maxWidth: '100%',
                   maxHeight: '100%',
                 },
               }}
             />
-          ) : (
+          ) : currentSyntax === 'plantuml' ? (
             <PlantUMLViewer 
-              code={code || ''} 
-              onError={(error) => setRenderError(error)}
+              code={code}
+              onError={setRenderError}
+              scale={scale}
+              position={position}
             />
+          ) : null}
+          {renderError && (
+            <Typography color="error" sx={{ position: 'absolute', bottom: 8, left: 8 }}>
+              {renderError}
+            </Typography>
           )}
         </Box>
       )}

@@ -135,15 +135,19 @@ async def generate_diagram(request: GenerateDiagramRequest) -> Dict:
         
         # Clean up the diagram code
         cleaned_code = code.strip()
-        if "```mermaid" in cleaned_code:
+        
+        # Extract code from markdown blocks if present
+        if "```" + diagram_type.value in cleaned_code:
             try:
-                cleaned_code = cleaned_code.split("```mermaid")[1].split("```")[0].strip()
+                cleaned_code = cleaned_code.split("```" + diagram_type.value)[1].split("```")[0].strip()
             except IndexError:
                 pass
 
-        # Final cleaning pass to ensure consistent style and no semicolons
+        # Final cleaning pass using the appropriate validator
         if diagram_type == DiagramType.MERMAID:
             cleaned_code = DiagramValidator._clean_mermaid_code(cleaned_code)
+        elif diagram_type == DiagramType.PLANTUML:
+            cleaned_code = DiagramValidator._clean_plantuml_code(cleaned_code)
             
         # Log successful generation
         log_llm("Generated diagram successfully", {
@@ -175,13 +179,27 @@ async def generate_diagram(request: GenerateDiagramRequest) -> Dict:
 @router.get("/syntax-types")
 async def get_syntax_types() -> Dict[str, Any]:
     """Get available diagram syntax types and their subtypes."""
-    return {
-        "syntax": [t.value for t in DiagramType],
-        "types": {
-            DiagramType.MERMAID.value: [t.value for t in DiagramSubType if t != DiagramSubType.AUTO],
-            DiagramType.PLANTUML.value: ["sequence", "class", "activity", "component", "state", "mindmap", "gantt"]
+    try:
+        # Get available types from enum
+        syntax_types = DiagramType.to_list()
+        types = {}
+        
+        # Get subtypes for each syntax type
+        for syntax in syntax_types:
+            syntax_enum = DiagramType.from_string(syntax)
+            if syntax_enum:
+                subtypes = [t.value.replace('plantuml_', '') for t in DiagramSubType.for_syntax(syntax_enum)]
+                types[syntax] = subtypes
+        
+        return {
+            "syntax": syntax_types,
+            "types": types
         }
-    }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get syntax types: {str(e)}"
+        )
 
 @router.get("/history")
 async def get_diagram_history() -> List[DiagramHistoryItem]:
@@ -272,6 +290,46 @@ async def get_diagram_by_id(diagram_id: str) -> DiagramResponse:
         raise
     except Exception as e:
         error_msg = f"Failed to get diagram: {str(e)}"
+        log_error(error_msg)
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=error_msg
+        )
+
+@router.delete("/diagram/{diagram_id}")
+async def delete_diagram(diagram_id: str) -> Dict[str, str]:
+    """Delete a specific diagram by ID."""
+    try:
+        diagram = storage.get_diagram(diagram_id)
+        
+        if not diagram:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Diagram with ID {diagram_id} not found"
+            )
+            
+        storage.delete_diagram(diagram_id)
+        return {"status": "success", "message": f"Diagram {diagram_id} deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = f"Failed to delete diagram: {str(e)}"
+        log_error(error_msg)
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=error_msg
+        )
+
+@router.delete("/clear")
+async def clear_history() -> Dict[str, str]:
+    """Clear all diagram history."""
+    try:
+        storage.clear_diagrams()
+        return {"status": "success", "message": "All diagrams deleted successfully"}
+    except Exception as e:
+        error_msg = f"Failed to clear diagram history: {str(e)}"
         log_error(error_msg)
         traceback.print_exc()
         raise HTTPException(

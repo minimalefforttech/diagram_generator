@@ -99,16 +99,23 @@ Source diagram:
             code = raw_response
             notes = []
 
-            # Try to extract diagram code from markdown blocks
-            if "```mermaid" in raw_response:
+            # Try to extract diagram code from markdown blocks based on type
+            if diagram_type.lower() == "mermaid" and "```mermaid" in raw_response:
                 try:
                     code = raw_response.split("```mermaid")[1].split("```")[0].strip()
                 except IndexError:
-                    notes.append("Failed to extract diagram code from markdown")
+                    notes.append("Failed to extract Mermaid diagram code from markdown")
+            elif diagram_type.lower() == "plantuml" and "```plantuml" in raw_response:
+                try:
+                    code = raw_response.split("```plantuml")[1].split("```")[0].strip()
+                except IndexError:
+                    notes.append("Failed to extract PlantUML diagram code from markdown")
 
-        # Clean and validate the generated code for Mermaid diagrams
+        # Clean and validate the generated code for specific diagram types
         if diagram_type.lower() == "mermaid":
             code = DiagramValidator._clean_mermaid_code(code)
+        elif diagram_type.lower() == "plantuml":
+            code = DiagramValidator._clean_plantuml_code(code)
             
         try:
             # Validate the generated diagram

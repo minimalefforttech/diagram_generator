@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Box, CssBaseline } from '@mui/material';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Layout } from './components';
@@ -21,6 +21,9 @@ const App: React.FC = () => {
   const [agentIterations, setAgentIterations] = useState(0);
   const [currentType, setCurrentType] = useState<string>('auto');
   const queryClient = new QueryClient();
+  
+  // Reference to the SideBar component to access its methods
+  const sidebarRef = useRef<{ refreshHistory: () => void }>(null);
 
   const loadInitialContext = async () => {
     // Load initial logs
@@ -55,12 +58,12 @@ const App: React.FC = () => {
         description,
         model,
         syntax,
-        diagramType: diagramType?.toLowerCase() || 'auto',
+        diagramType,
         options: {
-          agent: { enabled: true },
-        },
+          agent: { enabled: true }
+        }
       });
-      
+
       // Now update the diagram data after the component is mounted
       setDiagram({
         loading: false,
@@ -72,6 +75,11 @@ const App: React.FC = () => {
       if (response.id) {
         const iterations = await diagramService.getAgentIterations(response.id);
         setAgentIterations(iterations);
+        
+        // Refresh the history list after successful diagram creation
+        if (sidebarRef.current) {
+          sidebarRef.current.refreshHistory();
+        }
       }
     } catch (err: any) {
       // Extract HTTP status code for Axios errors
@@ -84,8 +92,7 @@ const App: React.FC = () => {
       
       setDiagram({
         loading: false,
-        error: errorMessage,
-        code: undefined
+        error: errorMessage
       });
       toast.error(<ErrorToast message={errorMessage} details={errorDetails} />);
     }
@@ -124,6 +131,11 @@ const App: React.FC = () => {
       if (response.id || diagram.id) {
         const iterations = await diagramService.getAgentIterations(response.id || diagram.id || 'current');
         setAgentIterations(iterations);
+        
+        // Refresh the history list after successful diagram update
+        if (sidebarRef.current) {
+          sidebarRef.current.refreshHistory();
+        }
       }
     } catch (err: any) {
       // Extract HTTP status code for Axios errors
@@ -185,7 +197,6 @@ const App: React.FC = () => {
         loading: false,
         error: errorMessage
       }));
-      
       toast.error(<ErrorToast message={errorMessage} details={errorDetails} />);
     }
   };
@@ -248,6 +259,7 @@ const App: React.FC = () => {
             
             {/* SideBar visible across all screens */}
             <SideBar
+              ref={sidebarRef}
               logs={logs}
               onSelectDiagram={handleLoadDiagram}
               currentDiagramId={diagram.id}

@@ -1,11 +1,10 @@
-"""Service for generating diagrams from textual descriptions."""
+"""Service for generating diagrams from descriptions."""
 
+from typing import Dict, List, Optional, Tuple
 import logging
-from typing import Optional
-
-from ..backend.utils.diagram_validator import DiagramValidator, DiagramType
-from ..backend.utils.retry import retry_with_backoff
-from ..models.diagrams import DiagramRequest, DiagramResponse
+from diagram_generator.backend.core.diagram_generator import DiagramGenerator
+from diagram_generator.backend.utils.diagram_validator import DiagramType
+from diagram_generator.backend.models.configs import DiagramGenerationOptions
 
 logger = logging.getLogger(__name__)
 
@@ -16,52 +15,42 @@ class DiagramGeneratorService:
         self.diagram_agent = diagram_agent
         self.storage_service = storage_service
 
-    @retry_with_backoff(max_attempts=3)
-    async def generate_diagram(self, request: DiagramRequest) -> DiagramResponse:
+    async def generate_diagram(self, request) -> Dict:
         """Generate a diagram from the given request."""
         try:
-            # Generate diagram code
-            diagram_code = await self.diagram_agent.generate_diagram_code(
-                request.description,
-                request.diagram_type.lower() if request.diagram_type else None
+            # Convert type to proper enum
+            diagram_type = DiagramType.from_string(request.syntax_type)
+            if not diagram_type:
+                raise ValueError(f"Unsupported diagram type: {request.syntax_type}")
+
+            # Prepare generation options
+            options = DiagramGenerationOptions()
+            if request.options:
+                options = DiagramGenerationOptions.parse_obj(request.options)
+                if request.model:
+                    options.agent.model_name = request.model
+
+            # Generate the diagram
+            code, notes = await self.diagram_agent.generate_diagram(
+                description=request.description,
+                diagram_type=diagram_type.value,
+                options=options
             )
 
-            # Detect or validate diagram type
-            detected_type = DiagramValidator.detect_type(diagram_code)
-            if not detected_type and request.diagram_type:
-                detected_type = DiagramType.from_string(request.diagram_type)
-            
-            if not detected_type:
-                raise ValueError("Unable to determine diagram type")
-
-            # Validate the generated code
-            validation_result = DiagramValidator.validate(diagram_code, detected_type)
-            if not validation_result.is_valid:
-                logger.error(f"Generated diagram validation failed: {validation_result.errors}")
-                # Attempt to fix common issues
-                diagram_code = await self.diagram_agent.fix_diagram_code(
-                    diagram_code,
-                    validation_result.errors,
-                    detected_type.value
-                )
-                # Revalidate after fixes
-                validation_result = DiagramValidator.validate(diagram_code, detected_type)
-                if not validation_result.is_valid:
-                    raise ValueError(f"Invalid diagram code: {validation_result.errors}")
-
-            # Store the generated diagram
-            diagram_id = await self.storage_service.store_diagram(
-                code=diagram_code,
-                diagram_type=detected_type.value,
-                description=request.description
+            # Validate and clean the generated code
+            validation = await self.diagram_agent.validate_diagram(
+                code=code,
+                diagram_type=diagram_type.value
             )
 
-            return DiagramResponse(
-                diagram_id=diagram_id,
-                code=diagram_code,
-                diagram_type=detected_type.value
-            )
+            return {
+                "code": code,
+                "type": diagram_type.value,
+                "subtype": request.subtype or "auto",
+                "notes": notes,
+                "validation": validation
+            }
 
         except Exception as e:
-            logger.error(f"Error generating diagram: {str(e)}")
+            logger.error(f"Failed to generate diagram: {str(e)}", exc_info=True)
             raise

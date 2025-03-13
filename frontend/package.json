@@ -23,7 +23,8 @@
     "mermaid": "^10.8.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-toastify": "^11.0.5"
+    "react-toastify": "^11.0.5",
+    "plantuml-encoder": "^1.4.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.20",

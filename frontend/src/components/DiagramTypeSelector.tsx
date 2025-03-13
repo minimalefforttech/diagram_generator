@@ -1,20 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import {
-  Box,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  SelectChangeEvent,
-} from '@mui/material';
+import { Box, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
 import { diagramService } from '../services/api';
+import { SyntaxTypesResponse } from '../types';
 
 interface DiagramTypeSelectorProps {
   currentSyntax: string;
   currentType: string;
   onSyntaxChange: (syntax: string) => void;
   onTypeChange: (type: string) => void;
-  disabled?: boolean;
 }
 
 const DiagramTypeSelector: React.FC<DiagramTypeSelectorProps> = ({
@@ -22,72 +15,74 @@ const DiagramTypeSelector: React.FC<DiagramTypeSelectorProps> = ({
   currentType,
   onSyntaxChange,
   onTypeChange,
-  disabled = false,
 }) => {
-  const [availableSyntaxTypes, setAvailableSyntaxTypes] = useState<string[]>([]);
-  const [availableSubtypes, setAvailableSubtypes] = useState<string[]>([]);
+  const [syntaxTypes, setSyntaxTypes] = useState<string[]>([]);
+  const [subtypes, setSubtypes] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadSyntaxTypes = async () => {
+    const loadTypes = async () => {
       try {
         const response = await diagramService.getSyntaxTypes();
-        setAvailableSyntaxTypes(response.syntax);
-        // Update subtypes when syntax changes
-        if (response.types[currentSyntax]) {
-          setAvailableSubtypes(response.types[currentSyntax]);
-        }
+        setSyntaxTypes(response.syntax);
+        updateSubtypes(currentSyntax, response);
+        setError(null);
       } catch (error) {
-        console.error('Failed to load syntax types:', error);
-        // Set defaults in case of error
-        setAvailableSyntaxTypes(['mermaid']);
-        setAvailableSubtypes(['flowchart', 'sequence', 'class', 'state', 'er']);
+        console.error('Failed to load diagram types:', error);
+        setError('Failed to load diagram types');
+        // Use default values from the API service's error handler
+        const defaultTypes = await diagramService.getSyntaxTypes();
+        setSyntaxTypes(defaultTypes.syntax);
+        updateSubtypes(currentSyntax, defaultTypes);
       } finally {
         setLoading(false);
       }
     };
 
-    loadSyntaxTypes();
+    loadTypes();
   }, [currentSyntax]);
 
-  const handleSyntaxChange = (event: SelectChangeEvent<string>) => {
-    const newSyntax = event.target.value;
-    onSyntaxChange(newSyntax);
+  const updateSubtypes = (syntax: string, response: SyntaxTypesResponse) => {
+    const types = response.types[syntax] || [];
+    setSubtypes(['auto', ...types]);
   };
 
-  const handleTypeChange = (event: SelectChangeEvent<string>) => {
-    const newType = event.target.value;
-    onTypeChange(newType);
+  const handleSyntaxChange = (event: React.ChangeEvent<{ value: unknown }>) => {
+    const newSyntax = event.target.value as string;
+    onSyntaxChange(newSyntax);
+    onTypeChange('auto'); // Reset type when syntax changes
   };
+
+  if (loading) {
+    return null;
+  }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <FormControl size="small" disabled={disabled || loading}>
-        <InputLabel id="syntax-type-label">Syntax</InputLabel>
+    <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+      <FormControl size="small" sx={{ minWidth: 120 }}>
+        <InputLabel>Syntax</InputLabel>
         <Select
-          labelId="syntax-type-label"
           value={currentSyntax}
           label="Syntax"
           onChange={handleSyntaxChange}
         >
-          {availableSyntaxTypes.map((syntax) => (
-            <MenuItem key={syntax} value={syntax}>
-              {syntax.charAt(0).toUpperCase() + syntax.slice(1)}
+          {syntaxTypes.map((type) => (
+            <MenuItem key={type} value={type}>
+              {type.charAt(0).toUpperCase() + type.slice(1)}
             </MenuItem>
           ))}
         </Select>
       </FormControl>
 
-      <FormControl size="small" disabled={disabled || loading}>
-        <InputLabel id="diagram-type-label">Type</InputLabel>
+      <FormControl size="small" sx={{ minWidth: 120 }}>
+        <InputLabel>Type</InputLabel>
         <Select
-          labelId="diagram-type-label"
           value={currentType}
           label="Type"
-          onChange={handleTypeChange}
+          onChange={(e) => onTypeChange(e.target.value as string)}
         >
-          <MenuItem value="auto">Auto</MenuItem>
-          {availableSubtypes.map((type) => (
+          {subtypes.map((type) => (
             <MenuItem key={type} value={type}>
               {type.charAt(0).toUpperCase() + type.slice(1)}
             </MenuItem>

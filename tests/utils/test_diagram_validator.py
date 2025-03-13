@@ -5,6 +5,7 @@ from datetime import datetime
 
 from diagram_generator.backend.utils.diagram_validator import (
     DiagramType,
+    DiagramSubType,
     DiagramValidator,
     ValidationResult
 )
@@ -114,6 +115,142 @@ def test_validate_plantuml_invalid():
         result = DiagramValidator.validate_plantuml(diagram)
         assert not result.valid
         assert result.errors
+
+def test_validate_plantuml_subtypes():
+    """Test validation of different PlantUML diagram subtypes."""
+    test_cases = [
+        # Sequence diagram
+        ("""@startuml
+        Alice -> Bob: Authentication Request
+        Bob --> Alice: Authentication Response
+        @enduml""", True),
+        
+        # Class diagram
+        ("""@startuml
+        class Car {
+          -brand: String
+          +start(): void
+          +stop(): void
+        }
+        @enduml""", True),
+        
+        # Activity diagram
+        ("""@startuml
+        start
+        :Eat Hot Dogs;
+        :Drink Soda;
+        stop
+        @enduml""", True),
+        
+        # Component diagram
+        ("""@startuml
+        [First Component]
+        [Another Component] as AC
+        [First Component] --> AC
+        @enduml""", True),
+        
+        # State diagram
+        ("""@startuml
+        [*] --> State1
+        State1 --> [*]
+        @enduml""", True),
+        
+        # Invalid diagram - mixed types
+        ("""@startuml
+        class User {
+          +name: String
+        }
+        Alice -> Bob: hello
+        @enduml""", False)
+    ]
+    
+    for diagram, should_be_valid in test_cases:
+        result = DiagramValidator.validate(diagram, DiagramType.PLANTUML)
+        assert result.valid == should_be_valid, f"Failed validation for: {diagram}"
+
+def test_plantuml_specific_features():
+    """Test PlantUML-specific syntax features."""
+    test_cases = [
+        # Skinparam usage
+        ("""@startuml
+        skinparam monochrome true
+        Alice -> Bob: Hello
+        @enduml""", True),
+        
+        # Title and header
+        ("""@startuml
+        title This is a title
+        header Page Header
+        Alice -> Bob: Hello
+        @enduml""", True),
+        
+        # Note syntax
+        ("""@startuml
+        Alice -> Bob: Hello
+        note left: This is a note
+        @enduml""", True),
+        
+        # Styling with colors
+        ("""@startuml
+        skinparam sequence {
+            ArrowColor DeepSkyBlue
+            ActorBorderColor DeepSkyBlue
+        }
+        Alice -> Bob: Hello
+        @enduml""", True),
+        
+        # Invalid skinparam
+        ("""@startuml
+        skinparam invalid_param true
+        Alice -> Bob: Hello
+        @enduml""", True),  # Should still be valid as PlantUML handles unknown params
+        
+        # Invalid note placement
+        ("""@startuml
+        note invalid: This note has invalid placement
+        Alice -> Bob: Hello
+        @enduml""", False)
+    ]
+    
+    for diagram, should_be_valid in test_cases:
+        result = DiagramValidator.validate(diagram, DiagramType.PLANTUML)
+        assert result.valid == should_be_valid, f"Failed validation for: {diagram}"
+
+def test_plantuml_diagram_type_detection():
+    """Test detection of PlantUML diagram subtypes."""
+    test_cases = [
+        ("@startuml\nAlice -> Bob\n@enduml", DiagramSubType.PLANTUML_SEQUENCE),
+        ("@startuml\nclass User\n@enduml", DiagramSubType.PLANTUML_CLASS),
+        ("@startuml\n[Component]\n@enduml", DiagramSubType.PLANTUML_COMPONENT),
+        ("@startuml\nstate Idle\n@enduml", DiagramSubType.PLANTUML_STATE),
+        ("@startmindmap\n* Root\n@endmindmap", DiagramSubType.PLANTUML_MINDMAP),
+        ("@startuml\nstart\n:Step;\nstop\n@enduml", DiagramSubType.PLANTUML_ACTIVITY),
+        ("@startuml\nProject starts 2024/01/01\n[Task] lasts 10 days\n@enduml", DiagramSubType.PLANTUML_GANTT),
+        ("@startuml\ninvalid content\n@enduml", DiagramSubType.AUTO)  # Default to auto if can't detect
+    ]
+    
+    for diagram, expected_type in test_cases:
+        detected_type = DiagramSubType.from_string(DiagramValidator.detect_subtype(diagram))
+        assert detected_type == expected_type, f"Failed to detect correct subtype for: {diagram}"
+
+def test_plantuml_code_cleaning():
+    """Test cleaning of PlantUML diagram code."""
+    test_cases = [
+        # Fix tag casing
+        ("@StartUML\nBob->Alice\n@EndUML", "@startuml\nBob->Alice\n@enduml"),
+        # Normalize whitespace
+        ("@startuml    \n   Bob  ->  Alice   \n   @enduml   ", "@startuml\nBob -> Alice\n@enduml"),
+        # Fix common tag variants
+        ("@startuml\nBob->Alice\n@enduml", "@startuml\nBob->Alice\n@enduml"),
+        # Handle empty lines
+        ("@startuml\n\n\nBob->Alice\n\n\n@enduml", "@startuml\nBob->Alice\n@enduml"),
+        # Preserve indentation structure
+        ("@startuml\n  Bob->Alice\n    note right: Hello\n@enduml", "@startuml\n  Bob->Alice\n    note right: Hello\n@enduml")
+    ]
+    
+    for input_code, expected_output in test_cases:
+        cleaned = DiagramValidator._clean_plantuml_code(input_code)
+        assert cleaned.strip() == expected_output.strip(), f"Failed cleaning for: {input_code}"
 
 def test_validate_with_explicit_type():
     """Test validation with explicitly specified type."""

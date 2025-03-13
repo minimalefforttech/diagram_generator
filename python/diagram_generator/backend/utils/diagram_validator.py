@@ -10,20 +10,28 @@ class DiagramType(Enum):
 
     @classmethod
     def from_string(cls, value: str) -> Optional['DiagramType']:
-        """Create enum from string, case-insensitive."""
+        """Convert string to DiagramType enum.
+        
+        Args:
+            value: String value to convert
+            
+        Returns:
+            DiagramType enum value or None if not found
+        """
         try:
-            # Try exact match first
             return cls(value.lower())
         except ValueError:
-            # Try case-insensitive match
-            for member in cls:
-                if member.value.lower() == value.lower():
-                    return member
             return None
+
+    @classmethod
+    def to_list(cls) -> List[str]:
+        """Get list of all diagram type values."""
+        return [t.value for t in cls]
 
 class DiagramSubType(Enum):
     """Specific diagram types."""
     AUTO = "auto"
+    # Mermaid types
     FLOWCHART = "flowchart"
     SEQUENCE = "sequence"
     CLASS = "class"
@@ -32,20 +40,42 @@ class DiagramSubType(Enum):
     GANTT = "gantt"
     PIE = "pie"
     MINDMAP = "mindmap"
+    # PlantUML types
+    PLANTUML_SEQUENCE = "plantuml_sequence"
+    PLANTUML_CLASS = "plantuml_class"
+    PLANTUML_ACTIVITY = "plantuml_activity"
+    PLANTUML_COMPONENT = "plantuml_component"
+    PLANTUML_STATE = "plantuml_state"
+    PLANTUML_MINDMAP = "plantuml_mindmap"
+    PLANTUML_GANTT = "plantuml_gantt"
 
     @classmethod
     def from_string(cls, value: str) -> 'DiagramSubType':
-        """Create enum from string, case-insensitive."""
+        """Convert string to DiagramSubType enum."""
         try:
-            # Try exact match first
-            return cls(value.lower())
+            # Handle both plain and plantuml-prefixed values
+            if value.startswith('plantuml_'):
+                return cls(value)
+            return cls(value.upper())
         except ValueError:
-            # Try case-insensitive match
-            for member in cls:
-                if member.value.lower() == value.lower():
-                    return member
-            # Default to auto if no match
             return cls.AUTO
+
+    @classmethod
+    def for_syntax(cls, syntax_type: DiagramType) -> List['DiagramSubType']:
+        """Get available subtypes for a given syntax."""
+        if syntax_type == DiagramType.MERMAID:
+            return [
+                cls.FLOWCHART, cls.SEQUENCE, cls.CLASS,
+                cls.STATE, cls.ER, cls.GANTT, cls.PIE, cls.MINDMAP
+            ]
+        elif syntax_type == DiagramType.PLANTUML:
+            return [
+                cls.PLANTUML_SEQUENCE, cls.PLANTUML_CLASS,
+                cls.PLANTUML_ACTIVITY, cls.PLANTUML_COMPONENT,
+                cls.PLANTUML_STATE, cls.PLANTUML_MINDMAP,
+                cls.PLANTUML_GANTT
+            ]
+        return []
 
 class ValidationResult:
     """Result of diagram validation."""
@@ -99,7 +129,8 @@ class DiagramValidator:
             cleaned_code = DiagramValidator._clean_mermaid_code(code)
             return DiagramValidator._validate_mermaid(cleaned_code)
         elif diagram_type_enum == DiagramType.PLANTUML:
-            return DiagramValidator._validate_plantuml(code)
+            cleaned_code = DiagramValidator._clean_plantuml_code(code)
+            return DiagramValidator._validate_plantuml(cleaned_code)
         else:
             return ValidationResult(False, [f"Unsupported diagram type: {diagram_type}"])
 
@@ -189,3 +220,24 @@ class DiagramValidator:
             )
 
         return ValidationResult(True)
+
+    @staticmethod
+    def _clean_plantuml_code(code: str) -> str:
+        """Clean PlantUML diagram code by normalizing tags and whitespace."""
+        lines = code.strip().split('\n')
+        cleaned_lines = []
+        
+        for line in lines:
+            # Strip whitespace
+            stripped = line.strip()
+            
+            # Fix common tag issues
+            if stripped.startswith('@start') and not ' ' in stripped:
+                # Fix missing space in tags like @startUML -> @startuml
+                stripped = stripped[:5].lower() + stripped[5:]
+            elif stripped.startswith('@end') and not ' ' in stripped:
+                stripped = stripped[:4].lower() + stripped[4:]
+                
+            cleaned_lines.append(stripped)
+            
+        return '\n'.join(cleaned_lines)

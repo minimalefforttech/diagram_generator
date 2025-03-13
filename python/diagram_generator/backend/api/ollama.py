@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from diagram_generator.backend.services.ollama import OllamaService
 
 router = APIRouter(prefix="/ollama", tags=["ollama"])
-ollama_service = OllamaService(model="llama3.1:8b")
+ollama_service = OllamaService(model="llama2:latest")
 
 @router.get("/health")
 async def check_ollama_health() -> Dict[str, bool]:
@@ -23,7 +23,8 @@ async def check_ollama_health() -> Dict[str, bool]:
 async def list_models() -> List[Dict]:
     """Get list of available models."""
     try:
-        return ollama_service.get_available_models()
+        models = ollama_service.get_available_models()
+        return models
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -39,14 +40,15 @@ async def generate_completion(
 ) -> Dict:
     """Generate completion from Ollama."""
     try:
-        return ollama_service.generate_completion(
+        result = ollama_service.generate_completion(
             prompt=prompt,
             model=model,
             system_prompt=system_prompt,
             temperature=temperature
         )
+        return result
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Generation failed: {str(e)}"
+            detail=f"Failed to generate completion: {str(e)}"
         )

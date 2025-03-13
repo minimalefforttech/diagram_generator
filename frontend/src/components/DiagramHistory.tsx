@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import {
   Box,
   Paper,
@@ -10,10 +10,18 @@ import {
   IconButton,
   Tooltip,
   CircularProgress,
-  Alert
+  Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
+  Button
 } from '@mui/material';
 import HistoryIcon from '@mui/icons-material/History';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import DeleteIcon from '@mui/icons-material/Delete';
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import { diagramService } from '../services/api';
 import { DiagramHistoryItem } from '../types';
 
@@ -23,10 +31,43 @@ interface DiagramHistoryProps {
   alwaysExpanded?: boolean;
 }
 
-const DiagramHistory: React.FC<DiagramHistoryProps> = ({ onSelectDiagram, currentDiagramId, alwaysExpanded = false }) => {
+interface ConfirmDialogProps {
+  open: boolean;
+  title: string;
+  message: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+// Create a ref interface to expose methods
+export interface DiagramHistoryRefHandle {
+  refresh: () => Promise<void>;
+}
+
+const ConfirmDialog: React.FC<ConfirmDialogProps> = ({ open, title, message, onConfirm, onCancel }) => (
+  <Dialog open={open} onClose={onCancel}>
+    <DialogTitle>{title}</DialogTitle>
+    <DialogContent>
+      <DialogContentText>{message}</DialogContentText>
+    </DialogContent>
+    <DialogActions>
+      <Button onClick={onCancel} color="primary">Cancel</Button>
+      <Button onClick={onConfirm} color="error" variant="contained">Delete</Button>
+    </DialogActions>
+  </Dialog>
+);
+
+const DiagramHistory = forwardRef<DiagramHistoryRefHandle, DiagramHistoryProps>(({ 
+  onSelectDiagram, 
+  currentDiagramId, 
+  alwaysExpanded = false 
+}, ref) => {
   const [history, setHistory] = useState<DiagramHistoryItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
+  const [clearDialogOpen, setClearDialogOpen] = useState<boolean>(false);
+  const [diagramToDelete, setDiagramToDelete] = useState<string | null>(null);
 
   const fetchHistory = async () => {
     try {
@@ -42,6 +83,11 @@ const DiagramHistory: React.FC<DiagramHistoryProps> = ({ onSelectDiagram, curren
     }
   };
 
+  // Expose the refresh method via ref
+  useImperativeHandle(ref, () => ({
+    refresh: fetchHistory
+  }));
+
   useEffect(() => {
     fetchHistory();
   }, []);
@@ -49,6 +95,26 @@ const DiagramHistory: React.FC<DiagramHistoryProps> = ({ onSelectDiagram, curren
   const handleRefresh = (e: React.MouseEvent) => {
     e.stopPropagation();
     fetchHistory();
+  };
+
+  const handleDeleteDiagram = async (id: string) => {
+    try {
+      await diagramService.deleteDiagram(id);
+      fetchHistory();
+    } catch (error) {
+      console.error('Failed to delete diagram:', error);
+      setError('Failed to delete diagram');
+    }
+  };
+
+  const handleClearHistory = async () => {
+    try {
+      await diagramService.clearHistory();
+      fetchHistory();
+    } catch (error) {
+      console.error('Failed to clear history:', error);
+      setError('Failed to clear history');
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -77,13 +143,24 @@ const DiagramHistory: React.FC<DiagramHistoryProps> = ({ onSelectDiagram, curren
           <HistoryIcon />
           <Typography variant="subtitle1">Diagram History</Typography>
         </Box>
-        <IconButton
-          size="small"
-          onClick={handleRefresh}
-          disabled={loading}
-        >
-          <RefreshIcon />
-        </IconButton>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Tooltip title="Clear all history">
+            <IconButton
+              size="small"
+              onClick={() => setClearDialogOpen(true)}
+              disabled={loading || history.length === 0}
+            >
+              <DeleteSweepIcon />
+            </IconButton>
+          </Tooltip>
+          <IconButton
+            size="small"
+            onClick={handleRefresh}
+            disabled={loading}
+          >
+            <RefreshIcon />
+          </IconButton>
+        </Box>
       </Box>
       
       <Box sx={{ 
@@ -118,11 +195,24 @@ const DiagramHistory: React.FC<DiagramHistoryProps> = ({ onSelectDiagram, curren
                 key={item.id}
                 disablePadding
                 secondaryAction={
-                  <Tooltip title="Time created">
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <Typography variant="caption" color="text.secondary">
                       {formatDate(item.createdAt)}
                     </Typography>
-                  </Tooltip>
+                    <Tooltip title="Delete diagram">
+                      <IconButton 
+                        edge="end" 
+                        size="small" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDiagramToDelete(item.id);
+                          setDeleteDialogOpen(true);
+                        }}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
                 }
               >
                 <ListItemButton
@@ -150,8 +240,36 @@ const DiagramHistory: React.FC<DiagramHistoryProps> = ({ onSelectDiagram, curren
           </List>
         )}
       </Box>
+
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        title="Delete Diagram"
+        message="Are you sure you want to delete this diagram?"
+        onConfirm={() => {
+          if (diagramToDelete) {
+            handleDeleteDiagram(diagramToDelete);
+          }
+          setDeleteDialogOpen(false);
+          setDiagramToDelete(null);
+        }}
+        onCancel={() => {
+          setDeleteDialogOpen(false);
+          setDiagramToDelete(null);
+        }}
+      />
+
+      <ConfirmDialog
+        open={clearDialogOpen}
+        title="Clear History"
+        message="Are you sure you want to clear all diagram history? This action cannot be undone."
+        onConfirm={() => {
+          handleClearHistory();
+          setClearDialogOpen(false);
+        }}
+        onCancel={() => setClearDialogOpen(false)}
+      />
     </Paper>
   );
-};
+});
 
 export default DiagramHistory;

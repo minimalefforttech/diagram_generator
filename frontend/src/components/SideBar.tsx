@@ -3,11 +3,11 @@ import { Box, IconButton, Paper, Tooltip } from '@mui/material';
 import HistoryIcon from '@mui/icons-material/History';
 import ArticleIcon from '@mui/icons-material/Article';
 import OutputLog from './OutputLog';
-import DiagramHistory from './DiagramHistory';
+import DiagramHistory, { DiagramHistoryRefHandle } from './DiagramHistory';
 
 interface SideBarProps {
   logs: any[];
-  onSelectDiagram: (id: string) => void;
+  onSelectDiagram: (diagramId: string) => void;
   currentDiagramId?: string;
 }
 
@@ -20,6 +20,7 @@ export const SideBar: React.FC<SideBarProps> = ({
   const [isExpanded, setIsExpanded] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState('50%');
   const sidebarRef = useRef<HTMLDivElement>(null);
+  const historyRef = useRef<DiagramHistoryRefHandle>(null);
   
   // Update sidebarWidth based on window size
   useEffect(() => {
@@ -31,103 +32,91 @@ export const SideBar: React.FC<SideBarProps> = ({
     // Set initial width
     updateWidth();
 
-    // Add event listener for window resize
+    // Add resize listener
     window.addEventListener('resize', updateWidth);
-
-    // Clean up
+    
+    // Cleanup
     return () => window.removeEventListener('resize', updateWidth);
   }, []);
 
-  // Add click outside listener to collapse sidebar when clicking elsewhere
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (isExpanded && 
-          sidebarRef.current && 
-          !sidebarRef.current.contains(event.target as Node)) {
-        setIsExpanded(false);
-      }
-    };
-
-    // Only add the event listener if sidebar is expanded
-    if (isExpanded) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isExpanded]);
-
-  const handleIconClick = (panel: 'logs' | 'history') => {
-    if (activePanel === panel && isExpanded) {
-      // If clicking on active panel, collapse sidebar
-      setIsExpanded(false);
-    } else {
-      // If clicking on inactive panel or sidebar is collapsed, expand and set active panel
-      setActivePanel(panel);
-      setIsExpanded(true);
+  // Method to refresh the history panel - can be called by parent components
+  const refreshHistory = () => {
+    if (historyRef.current) {
+      historyRef.current.refresh();
     }
   };
 
   return (
-    <Paper 
+    <Paper
       ref={sidebarRef}
-      sx={{ 
+      sx={{
         position: 'fixed',
+        top: '64px',
         left: 0,
-        top: 56 + 8, // Account for header height + margin
-        bottom: 56 + 8,
-        width: isExpanded ? sidebarWidth : '42px',
-        display: 'flex',
-        borderRadius: isExpanded ? '0 8px 8px 0' : '0 8px 8px 0',
-        overflow: 'hidden',
+        height: 'calc(100vh - 128px)',
+        zIndex: 1000,
+        width: isExpanded ? sidebarWidth : '48px',
         transition: 'width 0.3s ease',
-        zIndex: 1200,
-        flexDirection: 'row-reverse', // Icons on the right side
-        boxShadow: 3
+        display: 'flex',
+        overflow: 'hidden',
+        borderRadius: '0 8px 8px 0' // Round the right side
       }}
     >
-      {/* Icons Panel - on the right side */}
-      <Box sx={{ 
-        width: 48, 
-        borderLeft: 1,
-        borderColor: 'divider',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        pt: 2,
-        gap: 1,
-        bgcolor: 'background.paper',
-        zIndex: 2 // Make sure icons stay on top
-      }}>
-        <Tooltip title="Logs" placement="left">
-          <IconButton 
-            onClick={() => handleIconClick('logs')}
-            color={activePanel === 'logs' && isExpanded ? 'primary' : 'default'}
-          >
-            <ArticleIcon />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title="History" placement="left">
-          <IconButton 
-            onClick={() => handleIconClick('history')}
-            color={activePanel === 'history' && isExpanded ? 'primary' : 'default'}
+      <Box
+        sx={{
+          width: '48px',
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          pt: 2,
+          borderRight: isExpanded ? 1 : 0,
+          borderColor: 'divider',
+          backgroundColor: 'background.paper',
+          zIndex: 1
+        }}
+      >
+        <Tooltip title="History" placement="right">
+          <IconButton
+            color={activePanel === 'history' ? 'primary' : 'default'}
+            onClick={() => {
+              setActivePanel('history');
+              setIsExpanded(prev => !prev);
+              // Refresh history when opening the panel
+              if (!isExpanded || activePanel !== 'history') {
+                refreshHistory();
+              }
+            }}
           >
             <HistoryIcon />
           </IconButton>
         </Tooltip>
+        <Tooltip title="Logs" placement="right">
+          <IconButton
+            color={activePanel === 'logs' ? 'primary' : 'default'}
+            onClick={() => {
+              setActivePanel('logs');
+              setIsExpanded(prev => !prev);
+            }}
+          >
+            <ArticleIcon />
+          </IconButton>
+        </Tooltip>
       </Box>
-
-      {/* Content Panel */}
-      <Box sx={{ 
-        flexGrow: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        height: '100%'
-      }}>
+      <Box 
+        sx={{
+          flexGrow: 1,
+          height: '100%',
+          display: isExpanded ? 'flex' : 'none', // Hide only the content panel when collapsed
+          flexDirection: 'column',
+          overflow: 'hidden',
+          backgroundColor: 'background.paper'
+        }}
+      >
         <Box sx={{
           flexGrow: 1,
+          display: 'flex',
+          flexDirection: 'column',
           overflow: 'auto',
           scrollbarWidth: 'thin',
           '&::-webkit-scrollbar': {
@@ -146,6 +135,7 @@ export const SideBar: React.FC<SideBarProps> = ({
             <OutputLog entries={logs} alwaysExpanded={true} />
           ) : (
             <DiagramHistory 
+              ref={historyRef}
               onSelectDiagram={(id) => {
                 onSelectDiagram(id);
                 setIsExpanded(false); // Close sidebar after selecting diagram
@@ -160,4 +150,17 @@ export const SideBar: React.FC<SideBarProps> = ({
   );
 };
 
-export default SideBar;
+// Expose refreshHistory method
+export default React.forwardRef<{ refreshHistory: () => void }, SideBarProps>((props, ref) => {
+  const historyRef = useRef<DiagramHistoryRefHandle>(null);
+
+  React.useImperativeHandle(ref, () => ({
+    refreshHistory: () => {
+      if (historyRef.current) {
+        historyRef.current.refresh();
+      }
+    }
+  }));
+
+  return <SideBar {...props} />;
+});
