@@ -94,7 +94,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
       
       if (syntaxType === 'mermaid') {
         enhancedPrompt += `3. For nodes, add style statements like: style NodeName fill:#color\n`;
-        enhancedPrompt += `4. For edges, add style statements like: linkStyle 0 stroke:#color\n`;
+        enhancedPrompt += `4. For edges, add style statements like: linkStyle default stroke:#color\n`;
       } else if (syntaxType === 'plantuml') {
         enhancedPrompt += `3. Use skinparam commands for styling\n`;
         enhancedPrompt += `4. Use color keywords like: #color\n`;
@@ -121,13 +121,10 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     const colorMode = theme.palette.mode;
     
     // Create a user-friendly message for display
-    const displayMessage = `Apply ${palette} color palette`;
-    
-    // Create the enhanced message with instructions for the backend
     const paletteMessage = `Apply these colors to the diagram: ${colors} for a ${colorMode} background theme.`;
     
     // Store only the user-visible message in chat history
-    addMessageToHistory(displayMessage);
+    addMessageToHistory(paletteMessage);
     
     // Send the enhanced message to the backend
     if (selectedModel && currentDiagram) {

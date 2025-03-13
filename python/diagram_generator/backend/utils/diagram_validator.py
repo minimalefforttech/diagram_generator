@@ -93,13 +93,39 @@ class DiagramValidator:
         else:
             diagram_type_enum = diagram_type
 
-        # Basic syntax validation
+        # Clean trailing semicolons and validate
         if diagram_type_enum == DiagramType.MERMAID:
-            return DiagramValidator._validate_mermaid(code)
+            # Strip trailing semicolons
+            cleaned_code = DiagramValidator._clean_mermaid_code(code)
+            return DiagramValidator._validate_mermaid(cleaned_code)
         elif diagram_type_enum == DiagramType.PLANTUML:
             return DiagramValidator._validate_plantuml(code)
         else:
             return ValidationResult(False, [f"Unsupported diagram type: {diagram_type}"])
+
+    @staticmethod
+    def _clean_mermaid_code(code: str) -> str:
+        """Clean Mermaid diagram code by removing trailing semicolons and fixing link styles."""
+        lines = code.strip().split('\n')
+        cleaned_lines = []
+        found_link_style = False
+        
+        for line in lines:
+            # Strip trailing semicolons from all lines except those in special sections
+            stripped = line.rstrip()
+            if stripped.endswith(';'):
+                stripped = stripped[:-1]
+                
+            # Check for linkStyle declarations
+            if 'linkStyle' in stripped:
+                if 'linkStyle 0 ' in stripped or 'linkStyle 1 ' in stripped:
+                    # Replace numbered linkStyle with default
+                    stripped = stripped.replace('linkStyle 0 ', 'linkStyle default ').replace('linkStyle 1 ', 'linkStyle default ')
+                found_link_style = True
+                
+            cleaned_lines.append(stripped)
+            
+        return '\n'.join(cleaned_lines)
 
     @staticmethod
     def _validate_mermaid(code: str) -> ValidationResult:
@@ -127,6 +153,17 @@ class DiagramValidator:
                 ["Diagram is empty or contains only comments"],
                 ["Add at least one node or connection"]
             )
+
+        # Check for consistency in link styling
+        link_styles = [line for line in code.split('\n') if 'linkStyle' in line]
+        if link_styles:
+            numbered_styles = any('linkStyle 0 ' in style or 'linkStyle 1 ' in style for style in link_styles)
+            if numbered_styles:
+                return ValidationResult(
+                    False,
+                    ["Inconsistent link styling"],
+                    ["Use 'linkStyle default' instead of numbered linkStyles for consistent styling"]
+                )
 
         return ValidationResult(True)
 

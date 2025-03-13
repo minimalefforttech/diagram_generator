@@ -7,6 +7,7 @@ from diagram_generator.backend.agents import DiagramAgent
 from diagram_generator.backend.models.configs import DiagramGenerationOptions, DiagramRAGConfig
 from diagram_generator.backend.services.ollama import OllamaService
 from diagram_generator.backend.utils.rag import RAGProvider
+from diagram_generator.backend.utils.diagram_validator import DiagramValidator, DiagramType
 
 class DiagramGenerator:
     """Handles generation and validation of diagrams."""
@@ -56,16 +57,7 @@ Source diagram:
         diagram_type: str = "mermaid",
         options: Optional[Union[Dict, DiagramGenerationOptions]] = None
     ) -> Tuple[str, List[str]]:
-        """Generate a diagram from a description.
-        
-        Args:
-            description: Text description of desired diagram
-            diagram_type: Target diagram syntax type
-            options: Optional generation parameters
-        
-        Returns:
-            Tuple of (diagram code, list of notes/warnings)
-        """
+        """Generate a diagram from a description."""
         # Convert dict options to DiagramGenerationOptions if needed
         generation_options = self._prepare_options(options)
         
@@ -83,37 +75,41 @@ Source diagram:
                 self._setup_rag_provider(generation_options.rag)
                 
             # Generate diagram with agent
-            return await self.diagram_agent.generate_diagram(
+            code, notes = await self.diagram_agent.generate_diagram(
                 description=description,
                 diagram_type=diagram_type,
                 options=generation_options,
                 rag_provider=self.rag_provider
             )
+        else:
+            # Fall back to legacy implementation if agent is disabled
+            prompt = self.prompts["generate"].format(
+                type=diagram_type,
+                description=description
+            )
             
-        # Fall back to legacy implementation if agent is disabled
-        prompt = self.prompts["generate"].format(
-            type=diagram_type,
-            description=description
-        )
-        
-        response = self.llm_service.generate_completion(
-            prompt=prompt,
-            temperature=0.2,
-            model=model or self.llm_service.model
-        )
-        
-        # Extract diagram code and any warnings
-        raw_response = response["response"]
-        code = raw_response
-        notes = []
+            response = self.llm_service.generate_completion(
+                prompt=prompt,
+                temperature=0.2,
+                model=model or self.llm_service.model
+            )
+            
+            # Extract diagram code and any warnings
+            raw_response = response["response"]
+            code = raw_response
+            notes = []
 
-        # Try to extract diagram code from markdown blocks
-        if "```mermaid" in raw_response:
-            try:
-                code = raw_response.split("```mermaid")[1].split("```")[0].strip()
-            except IndexError:
-                notes.append("Failed to extract diagram code from markdown")
-        
+            # Try to extract diagram code from markdown blocks
+            if "```mermaid" in raw_response:
+                try:
+                    code = raw_response.split("```mermaid")[1].split("```")[0].strip()
+                except IndexError:
+                    notes.append("Failed to extract diagram code from markdown")
+
+        # Clean and validate the generated code for Mermaid diagrams
+        if diagram_type.lower() == "mermaid":
+            code = DiagramValidator._clean_mermaid_code(code)
+            
         try:
             # Validate the generated diagram
             validation = await self.validate_diagram(code, diagram_type)
@@ -138,8 +134,6 @@ Source diagram:
         Returns:
             Dictionary containing validation results
         """
-        from diagram_generator.backend.utils.diagram_validator import DiagramValidator, DiagramType
-        
         try:
             # First use our static validator for basic syntax checking
             validation_result = DiagramValidator.validate(code, diagram_type)

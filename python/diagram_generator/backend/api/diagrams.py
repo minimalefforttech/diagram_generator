@@ -10,7 +10,7 @@ import traceback
 from fastapi import APIRouter, Body, HTTPException, Query
 from pydantic import BaseModel
 
-from diagram_generator.backend.utils.diagram_validator import DiagramType, DiagramSubType
+from diagram_generator.backend.utils.diagram_validator import DiagramValidator, ValidationResult, DiagramType, DiagramSubType
 from diagram_generator.backend.core.diagram_generator import DiagramGenerator
 from diagram_generator.backend.models.configs import DiagramGenerationOptions
 from diagram_generator.backend.services.ollama import OllamaService
@@ -84,7 +84,7 @@ async def generate_diagram(request: GenerateDiagramRequest) -> Dict:
                 status_code=400, 
                 detail=f"Invalid syntax type: {request.syntax_type}. Must be one of: {[t.value for t in DiagramType]}"
             )
-
+            
         # Prepare generation options
         generation_options = request.options or {}
         
@@ -111,7 +111,7 @@ async def generate_diagram(request: GenerateDiagramRequest) -> Dict:
                 error_msg = f"API docs directory not found: {api_docs_dir}"
                 log_error(error_msg)
                 raise HTTPException(status_code=400, detail=error_msg)
-        
+
         # Log the generation request
         log_llm("Generating diagram", {
             "description": request.description,
@@ -140,17 +140,11 @@ async def generate_diagram(request: GenerateDiagramRequest) -> Dict:
                 cleaned_code = cleaned_code.split("```mermaid")[1].split("```")[0].strip()
             except IndexError:
                 pass
-        
-        # Normalize indentation
-        if "\n" in cleaned_code:
-            lines = cleaned_code.splitlines()
-            min_indent = float('inf')
-            for line in lines:
-                if line.strip():
-                    min_indent = min(min_indent, len(line) - len(line.lstrip()))
-            min_indent = 0 if min_indent == float('inf') else min_indent
-            cleaned_code = "\n".join(line[min_indent:].rstrip() for line in lines)
 
+        # Final cleaning pass to ensure consistent style and no semicolons
+        if diagram_type == DiagramType.MERMAID:
+            cleaned_code = DiagramValidator._clean_mermaid_code(cleaned_code)
+            
         # Log successful generation
         log_llm("Generated diagram successfully", {
             "code": cleaned_code,
@@ -163,6 +157,7 @@ async def generate_diagram(request: GenerateDiagramRequest) -> Dict:
             "subtype": diagram_subtype.value,
             "notes": [note for note in notes if note != "Failed to parse JSON response"]
         }
+
     except Exception as e:
         error_msg = f"Failed to generate diagram: {str(e)}"
         log_error(error_msg, {
