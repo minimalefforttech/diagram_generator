@@ -74,7 +74,11 @@ const DiagramHistory = forwardRef<DiagramHistoryRefHandle, DiagramHistoryProps>(
       setLoading(true);
       setError(null);
       const historyData = await diagramService.getDiagramHistory();
-      setHistory(historyData);
+      // Ensure history is properly sorted by creation date
+      const sortedHistory = [...historyData].sort((a, b) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      setHistory(sortedHistory);
     } catch (error) {
       console.error('Failed to fetch diagram history:', error);
       setError('Failed to load diagram history');
@@ -85,7 +89,9 @@ const DiagramHistory = forwardRef<DiagramHistoryRefHandle, DiagramHistoryProps>(
 
   // Expose the refresh method via ref
   useImperativeHandle(ref, () => ({
-    refresh: fetchHistory
+    refresh: () => {
+      return fetchHistory();
+    }
   }));
 
   useEffect(() => {

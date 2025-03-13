@@ -20,7 +20,7 @@ export interface LayoutProps {
   diagram: DiagramState;
   logs: any[];
   agentIterations: number;
-  onRequestChanges: (message: string, model: string) => void;
+  onRequestChanges: (message: string, model: string, updateCurrent?: boolean) => void;
   onNewDiagram: () => void;
   onClearLogs: () => void;
   onLoadDiagram: (id: string) => void;

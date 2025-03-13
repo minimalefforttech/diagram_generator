@@ -6,7 +6,6 @@ export interface DiagramState {
 }
 
 export interface LogEntry {
-  id: string;
   timestamp: string;
   type: string;
   message: string;
@@ -40,14 +39,10 @@ export interface DiagramResponse {
 }
 
 export interface SyntaxTypesResponse {
+  syntax: string[];
   types: {
-    id: string;
-    name: string;
-    subtypes: {
-      id: string;
-      name: string;
-    }[];
-  }[];
+    [key: string]: string[];
+  };
 }
 
 export interface DiagramHistoryItem {

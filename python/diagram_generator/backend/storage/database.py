@@ -1,11 +1,16 @@
 """Database storage for diagrams and conversation history."""
 
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple, Any
 
 from pydantic import BaseModel
+import traceback
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 class DiagramRecord(BaseModel):
     """Record of a generated diagram."""
@@ -33,6 +38,13 @@ class ConversationRecord(BaseModel):
     updated_at: datetime
     metadata: Dict[str, Any] = {}
 
+class LogRecord(BaseModel):
+    """Record of a log entry."""
+    type: str
+    message: str
+    timestamp: datetime
+    details: Optional[Any] = None
+
 class StorageError(Exception):
     """Base class for storage-related errors."""
     pass
@@ -42,6 +54,7 @@ class StorageConfig(BaseModel):
     data_dir: str = "data"
     diagrams_dir: str = "diagrams"
     conversations_dir: str = "conversations"
+    logs_dir: str = "logs"
     user_preferences_dir: str = "user_preferences"
     index_file: str = "index.json"
 
@@ -54,16 +67,19 @@ class Storage:
         Args:
             config: Storage configuration
         """
+        self.index = {"diagrams": {}, "conversations": {}, "logs": []}
         self.config = config
         self.base_path = Path(config.data_dir)
         self.diagrams_path = self.base_path / config.diagrams_dir
         self.conversations_path = self.base_path / config.conversations_dir
+        self.logs_path = self.base_path / config.logs_dir
         self.user_preferences_path = self.base_path / config.user_preferences_dir
         self.index_path = self.base_path / config.index_file
 
         # Create directory structure
         self.diagrams_path.mkdir(parents=True, exist_ok=True)
         self.conversations_path.mkdir(parents=True, exist_ok=True)
+        self.logs_path.mkdir(parents=True, exist_ok=True)
         self.user_preferences_path.mkdir(parents=True, exist_ok=True)
 
         # Load or create index
@@ -75,16 +91,80 @@ class Storage:
         Returns:
             dict: Storage index
         """
+        default_index = {"diagrams": {}, "conversations": {}, "logs": []}
         if self.index_path.exists():
             try:
-                return json.loads(self.index_path.read_text())
-            except json.JSONDecodeError:
-                return {"diagrams": {}, "conversations": {}}
-        return {"diagrams": {}, "conversations": {}}
+                index = json.loads(self.index_path.read_text())
+                # Ensure all required keys exist with default values
+                for key, default_value in default_index.items():
+                    if key not in index:
+                        index[key] = default_value
+                return index
+            except json.JSONDecodeError as e:
+                error_msg = "Failed to parse index file, creating new one"
+                self.log_exception(error_msg, e)
+                return default_index
+        return default_index
         
     def _save_index(self) -> None:
         """Save storage index to disk."""
-        self.index_path.write_text(json.dumps(self.index, indent=2))
+        try:
+            self.index_path.write_text(json.dumps(self.index, indent=2))
+        except Exception as e:
+            logger.error(f"Failed to save index file: {str(e)}", exc_info=True)
+            raise StorageError("Failed to save index file")
+    
+    def log_exception(self, message:str, exception: Exception) -> None:
+        """Log an exception to the storage layer.
+        
+        Args:
+            message: Message to log
+            exception: Exception to log
+        """
+        details = {}
+        details["traceback"] = traceback.format_exception(type(exception), exception, exception.__traceback__)
+        
+        # Log the exception
+        log_record = LogRecord(
+            type="error",
+            message=message,
+            timestamp=datetime.now(),
+            details={"exception": str(exception), "traceback": details["traceback"]}
+        )
+        self.save_log(log_record)
+        logger.error(message, extra={"details": details}, exc_info=True)
+
+    def save_log(self, log: LogRecord) -> None:
+        """Save a log record.
+        
+        Args:
+            log: Log record to save
+        """
+        # Convert log to dict
+        log_dict = log.model_dump()
+        log_dict["timestamp"] = log_dict["timestamp"].isoformat()
+        
+        # Add to index
+        self.index["logs"].append(log_dict)
+        
+        # Keep only last 1000 logs
+        if len(self.index["logs"]) > 1000:
+            self.index["logs"] = self.index["logs"][-1000:]
+            
+        self._save_index()
+
+    def get_logs(self) -> List[LogRecord]:
+        """Get all log records.
+        
+        Returns:
+            List[LogRecord]: List of log records
+        """
+        return [LogRecord(**log) for log in self.index.get("logs", [])]
+
+    def clear_logs(self) -> None:
+        """Clear all log records."""
+        self.index["logs"] = []
+        self._save_index()
         
     def save_diagram(self, diagram: DiagramRecord) -> None:
         """Save a diagram record.
@@ -92,21 +172,25 @@ class Storage:
         Args:
             diagram: Diagram record to save
         """
-        # Convert diagram to dict and ensure tags is serialized as a list
-        diagram_dict = diagram.model_dump()
-        diagram_dict["tags"] = list(diagram_dict["tags"]) if diagram_dict.get("tags") else []
-        
-        # Save diagram data
-        diagram_path = self.diagrams_path / f"{diagram.id}.json"
-        diagram_path.write_text(json.dumps(diagram_dict, indent=2, default=str))
-        
-        # Update index
-        self.index["diagrams"][diagram.id] = {
-            "type": diagram.diagram_type,
-            "tags": list(diagram.tags),
-            "created_at": diagram.created_at.isoformat()
-        }
-        self._save_index()
+        try:
+            # Convert diagram to dict and ensure tags is serialized as a list
+            diagram_dict = diagram.model_dump()
+            diagram_dict["tags"] = list(diagram_dict["tags"]) if diagram_dict.get("tags") else []
+            
+            # Save diagram data
+            diagram_path = self.diagrams_path / f"{diagram.id}.json"
+            diagram_path.write_text(json.dumps(diagram_dict, indent=2, default=str))
+            
+            # Update index
+            self.index["diagrams"][diagram.id] = {
+                "type": diagram.diagram_type,
+                "tags": list(diagram.tags),
+                "created_at": diagram.created_at.isoformat()
+            }
+            self._save_index()
+        except Exception as e:
+            self.log_exception(f"Failed to save diagram {diagram.id}: {str(e)}", e)
+            raise StorageError(f"Failed to save diagram {diagram.id}")
 
     def get_diagram(self, diagram_id: str) -> Optional[DiagramRecord]:
         """Retrieve a diagram record.
@@ -129,6 +213,7 @@ class Storage:
                 data["tags"] = set(data["tags"]) if isinstance(data["tags"], list) else set()
             return DiagramRecord.model_validate(data)
         except Exception as e:
+            self.log_exception(f"Failed to load diagram {diagram_id}: {e}", e)
             raise StorageError(f"Failed to load diagram {diagram_id}: {e}")
 
     def save_conversation(self, conversation: ConversationRecord) -> None:
@@ -137,17 +222,21 @@ class Storage:
         Args:
             conversation: Conversation record to save
         """
-        # Save conversation data
-        conv_path = self.conversations_path / f"{conversation.id}.json"
-        conv_path.write_text(json.dumps(conversation.model_dump(), indent=2, default=str))
-        
-        # Update index
-        self.index["conversations"][conversation.id] = {
-            "diagram_id": conversation.diagram_id,
-            "created_at": conversation.created_at.isoformat(),
-            "updated_at": conversation.updated_at.isoformat()
-        }
-        self._save_index()
+        try:
+            # Save conversation data
+            conv_path = self.conversations_path / f"{conversation.id}.json"
+            conv_path.write_text(json.dumps(conversation.model_dump(), indent=2, default=str))
+            
+            # Update index
+            self.index["conversations"][conversation.id] = {
+                "diagram_id": conversation.diagram_id,
+                "created_at": conversation.created_at.isoformat(),
+                "updated_at": conversation.updated_at.isoformat()
+            }
+            self._save_index()
+        except Exception as e:
+            self.log_exception(f"Failed to save conversation {conversation.id}: {str(e)}", e)
+            raise StorageError(f"Failed to save conversation {conversation.id}")
         
     def get_conversation(self, conversation_id: str) -> Optional[ConversationRecord]:
         """Retrieve a conversation record.
@@ -167,6 +256,7 @@ class Storage:
             data = json.loads(conv_path.read_text())
             return ConversationRecord.model_validate(data)
         except Exception as e:
+            self.log_exception(f"Failed to load conversation {conversation_id}: {e}", e)
             raise StorageError(f"Failed to load conversation {conversation_id}: {e}")
             
     def delete_diagram(self, diagram_id: str) -> bool:
@@ -185,7 +275,8 @@ class Storage:
             self.index["diagrams"].pop(diagram_id, None)
             self._save_index()
             return True
-        except Exception:
+        except Exception as e:
+            self.log_exception(f"Failed to delete diagram {diagram_id}: {str(e)}", e)
             return False
             
     def delete_conversation(self, conversation_id: str) -> bool:
@@ -204,7 +295,8 @@ class Storage:
             self.index["conversations"].pop(conversation_id, None)
             self._save_index()
             return True
-        except Exception:
+        except Exception as e:
+            self.log_exception(f"Failed to delete conversation {conversation_id}: {str(e)}", e)
             return False
 
     def clear_diagrams(self) -> None:
@@ -226,8 +318,9 @@ class Storage:
             # Clear index entries
             self.index["diagrams"].clear()
             self._save_index()
-            
+
         except Exception as e:
+            self.log_exception(f"Failed to clear diagrams: {str(e)}", e)
             raise StorageError(f"Failed to clear diagrams: {str(e)}")
 
     def search_diagrams(
@@ -332,9 +425,13 @@ class Storage:
             user_id: ID of user
             preferences: User preferences to save
         """
-        # Save preferences data
-        pref_path = self.user_preferences_path / f"{user_id}.json"
-        pref_path.write_text(json.dumps(preferences, indent=2, default=str))
+        try:
+            # Save preferences data
+            pref_path = self.user_preferences_path / f"{user_id}.json"
+            pref_path.write_text(json.dumps(preferences, indent=2, default=str))
+        except Exception as e:
+            self.log_exception(f"Failed to save preferences for user {user_id}: {str(e)}", e)
+            raise StorageError(f"Failed to save preferences for user {user_id}")
 
     def get_preferences(self, user_id: str) -> Optional[Dict[str, Any]]:
         """Retrieve user preferences.
@@ -354,4 +451,6 @@ class Storage:
             data = json.loads(pref_path.read_text())
             return data
         except Exception as e:
-            raise StorageError(f"Failed to load preferences for user {user_id}: {e}")
+            error_msg = f"Failed to load preferences for user {user_id}: {e}"
+            self.log_exception(error_msg, e)
+            raise StorageError(error_msg)

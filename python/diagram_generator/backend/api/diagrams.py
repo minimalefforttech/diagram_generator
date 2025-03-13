@@ -17,8 +17,6 @@ from diagram_generator.backend.services.ollama import OllamaService
 from .logs import log_llm, log_error
 
 from diagram_generator.backend.storage.database import Storage, ConversationRecord, ConversationMessage
-from .logs import LogEntry, log_service
-
 # Initialize services
 ollama_service = OllamaService()
 diagram_generator = DiagramGenerator(llm_service=ollama_service)
@@ -255,6 +253,83 @@ async def get_diagram_iterations(diagram_id: str) -> int:
         raise
     except Exception as e:
         error_msg = f"Failed to get diagram iterations: {str(e)}"
+        log_error(error_msg)
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=error_msg
+        )
+
+@router.post("/diagram/{diagram_id}/update")
+async def update_diagram(
+    diagram_id: str,
+    request: GenerateDiagramRequest
+) -> DiagramResponse:
+    """Update an existing diagram."""
+    try:
+        diagram = storage.get_diagram(diagram_id)
+        
+        if not diagram:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Diagram with ID {diagram_id} not found"
+            )
+
+        # Convert input types to proper enums
+        diagram_type = DiagramType.from_string(request.syntax_type or diagram.diagram_type)
+        diagram_subtype = DiagramSubType.from_string(request.subtype or "auto")
+        
+        # Prepare generation options
+        generation_options = request.options or {}
+        if request.model:
+            generation_options["model"] = request.model
+
+        # Configure agent options if not provided
+        if "agent" not in generation_options:
+            generation_options["agent"] = {
+                "enabled": True,
+                "max_iterations": 3
+            }
+
+        # Generate the updated diagram
+        code, notes = await diagram_generator.generate_diagram(
+            description=request.description,
+            diagram_type=diagram_type.value,
+            options=generation_options
+        )
+        
+        # Clean up the code
+        cleaned_code = code.strip()
+        if "```" + diagram_type.value in cleaned_code:
+            try:
+                cleaned_code = cleaned_code.split("```" + diagram_type.value)[1].split("```")[0].strip()
+            except IndexError:
+                pass
+
+        if diagram_type == DiagramType.MERMAID:
+            cleaned_code = DiagramValidator._clean_mermaid_code(cleaned_code)
+        elif diagram_type == DiagramType.PLANTUML:
+            cleaned_code = DiagramValidator._clean_plantuml_code(cleaned_code)
+
+        # Update the diagram and save it back
+        diagram.code = cleaned_code
+        diagram.description = request.description
+        storage.save_diagram(diagram)
+
+        return DiagramResponse(
+            id=diagram.id,
+            code=cleaned_code,
+            type=diagram_type.value,
+            description=request.description,
+            createdAt=diagram.created_at.isoformat(),
+            metadata=diagram.metadata,
+            notes=notes
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = f"Failed to update diagram: {str(e)}"
         log_error(error_msg)
         traceback.print_exc()
         raise HTTPException(

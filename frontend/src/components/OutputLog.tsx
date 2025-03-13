@@ -37,9 +37,10 @@ import InfoIcon from '@mui/icons-material/Info';
 interface OutputLogProps {
   entries: LogEntry[];
   alwaysExpanded?: boolean;
+  onDetailsOpenChange?: (open: boolean) => void;
 }
 
-const OutputLog: React.FC<OutputLogProps> = ({ entries, alwaysExpanded = false }) => {
+const OutputLog: React.FC<OutputLogProps> = ({ entries, alwaysExpanded = false, onDetailsOpenChange }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [logLevel, setLogLevel] = useState<string>('all');
   const [showFilters, setShowFilters] = useState(false);
@@ -68,10 +69,12 @@ const OutputLog: React.FC<OutputLogProps> = ({ entries, alwaysExpanded = false }
   const handleEntryClick = (entry: LogEntry) => {
     setSelectedEntry(entry);
     setDetailsOpen(true);
+    onDetailsOpenChange?.(true);
   };
 
   const handleCloseDetails = () => {
     setDetailsOpen(false);
+    onDetailsOpenChange?.(false);
   };
 
   // Filter logs based on search term and level
@@ -88,7 +91,7 @@ const OutputLog: React.FC<OutputLogProps> = ({ entries, alwaysExpanded = false }
   // Format timestamp
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);
-    return date.toLocaleTimeString();
+    return date.toLocaleTimeString() + " " + date.toLocaleDateString();
   };
 
   // Get color for log level
@@ -97,9 +100,11 @@ const OutputLog: React.FC<OutputLogProps> = ({ entries, alwaysExpanded = false }
       case 'error':
         return 'error';
       case 'llm':
-        return 'info';
+        return 'primary';
       case 'info':
-        return 'default';
+        return 'success';
+      case 'warning':
+        return 'warning';
       default:
         return 'default';
     }
@@ -205,24 +210,27 @@ const OutputLog: React.FC<OutputLogProps> = ({ entries, alwaysExpanded = false }
         </Box>
       </Collapse>
 
-      <Collapse in={alwaysExpanded || expanded} sx={{ flexGrow: 1, minHeight: 0 }}>
+      <Collapse in={alwaysExpanded || expanded} sx={{ 
+        flexGrow: 1, 
+        minHeight: 0,
+        overflow: 'auto',
+        scrollbarWidth: 'thin',
+        '&::-webkit-scrollbar': {
+          width: '8px',
+        },
+        '&::-webkit-scrollbar-thumb': {
+          backgroundColor: 'rgba(255, 255, 255, 0.2)',
+          borderRadius: '4px',
+        }
+      }}>
         <List dense sx={{ 
-          height: showFilters ? 'calc(100% - 60px)' : '100%',  
-          overflow: 'auto',
-          scrollbarWidth: 'thin',
-          '&::-webkit-scrollbar': {
-            width: '8px',
-          },
-          '&::-webkit-scrollbar-thumb': {
-            backgroundColor: 'rgba(255, 255, 255, 0.2)',
-            borderRadius: '4px',
-          }
+          height: showFilters ? 'calc(100% - 60px)' : '100%'
         }}>
-          {filteredEntries.length > 0 ? (
+        {filteredEntries.length > 0 ? (
             filteredEntries.map((entry, index) => (
               <React.Fragment key={index}>
-                <ListItem 
-                  button 
+                <ListItem
+                  component="div"
                   onClick={() => handleEntryClick(entry)}
                   sx={{ 
                     cursor: 'pointer',
@@ -234,29 +242,36 @@ const OutputLog: React.FC<OutputLogProps> = ({ entries, alwaysExpanded = false }
                   <ListItemText
                     primary={
                       <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
-                        <Typography variant="body2" component="span" color="text.secondary" sx={{ minWidth: 65 }}>
-                          {formatTime(entry.timestamp)}
-                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Typography variant="caption" component="span" color="text.secondary">
+                            {formatTime(entry.timestamp)}
+                          </Typography>
 
-                        <Chip
-                          label={entry.type}
-                          size="small"
-                          color={getLevelColor(entry.type) as any}
-                          variant="outlined"
-                          sx={{ height: 20, minWidth: 60 }}
-                        />
+                          <Chip
+                            label={entry.type}
+                            size="small"
+                            color={getLevelColor(entry.type) as any}
+                            sx={{ height: 20, minWidth: 60 }}
+                          />
+                        </Box>
 
-                        <Typography variant="body2" sx={{ wordBreak: 'break-word', flexGrow: 1 }}>
+                        <Typography variant="body2" sx={{ 
+                          wordBreak: 'break-word', 
+                          flexGrow: 1,
+                          color: entry.type.toLowerCase() === 'error' ? 'error.main' : 'inherit'
+                        }}>
                           {entry.message}
                         </Typography>
-                        
-                        {entry.details && (
-                          <Tooltip title="Has details">
-                            <InfoIcon fontSize="small" color="action" />
-                          </Tooltip>
-                        )}
                       </Box>
                     }
+                    secondary={entry.details && (
+                      <Box sx={{ mt: 0.5, display: 'flex', alignItems: 'center' }}>
+                        <InfoIcon sx={{ fontSize: 16, mr: 0.5, color: 'text.secondary' }} />
+                        <Typography variant="caption" color="text.secondary">
+                          Click to view details
+                        </Typography>
+                      </Box>
+                    )}
                   />
                 </ListItem>
                 {index < filteredEntries.length - 1 && <Divider component="li" />}

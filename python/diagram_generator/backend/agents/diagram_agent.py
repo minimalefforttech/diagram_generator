@@ -14,6 +14,7 @@ from diagram_generator.backend.models.configs import AgentConfig, DiagramGenerat
 from diagram_generator.backend.models.ollama import OllamaAPI, ErrorResponse
 from diagram_generator.backend.storage.database import Storage, DiagramRecord, ConversationRecord, ConversationMessage
 from diagram_generator.backend.utils.rag import RAGProvider
+from diagram_generator.backend.api.logs import log_error, log_llm
 from diagram_generator.backend.utils.diagram_validator import DiagramValidator, ValidationResult, DiagramType
 
 logger = logging.getLogger(__name__)
@@ -154,6 +155,12 @@ Never generate a new diagram. Only style the existing one.
         system = agent_config.system_prompt if agent_config and agent_config.enabled else None
 
         try:
+            log_llm("Starting LLM generation", {
+                "model": model,
+                "prompt": prompt,
+                "temperature": temperature,
+                "system": system
+            })
             result = await self.ollama.generate(
                 model=model,
                 prompt=prompt,
@@ -162,13 +169,15 @@ Never generate a new diagram. Only style the existing one.
             )
 
             if isinstance(result, ErrorResponse):
-                logger.error(f"LLM generation error: {result.error}")
-                raise Exception(f"Failed to generate diagram: {result.error}")
+                error_msg = f"Failed to generate diagram: {result.error}"
+                log_error(error_msg)
+                raise Exception(error_msg)
 
             # Ensure we have a response
             if not hasattr(result, 'response'):
-                logger.error("Invalid response format from LLM")
-                raise Exception("Invalid response format from LLM")
+                error_msg = "Invalid response format from LLM"
+                log_error(error_msg)
+                raise Exception(error_msg)
 
             # Get the raw content
             raw_content = result.response.strip()
@@ -178,12 +187,16 @@ Never generate a new diagram. Only style the existing one.
 
             # Ensure the content exists
             if not content:
-                logger.error("LLM returned empty or unusable response")
-                raise Exception("Empty or unusable response from LLM")
+                error_msg = "LLM returned empty or unusable response"
+                log_error(error_msg)
+                raise Exception(error_msg)
 
+            log_llm("Generated diagram code successfully", {
+                "content_length": len(content)
+            })
             return {"content": content}
         except Exception as e:
-            logger.error(f"Error in _generate_with_llm: {str(e)}", exc_info=True)
+            log_error(f"Error in _generate_with_llm: {str(e)}", exc_info=True)
             raise
 
     def _extract_clean_diagram_code(self, raw_content: str) -> str:
@@ -197,7 +210,7 @@ Never generate a new diagram. Only style the existing one.
                 if matches:
                     return matches[0].strip()
             except Exception as e:
-                self.logger.warning(f"Error extracting code block: {str(e)}")
+                log_error(f"Error extracting code block: {str(e)}")
 
         # Method 2: Look for known diagram syntax starters
         lines = raw_content.split("\n")
@@ -500,17 +513,24 @@ Never generate a new diagram. Only style the existing one.
             )
 
             if isinstance(result, ErrorResponse):
-                self.logger.error(f"Fix error: {result.error}")
-                raise Exception(f"Failed to fix diagram: {result.error}")
+                error_msg = f"Failed to fix diagram: {result.error}"
+                log_error(error_msg)
+                raise Exception(error_msg)
 
             if not hasattr(result, 'response'):
-                self.logger.error("Invalid response format from LLM")
-                raise Exception("Invalid response format from LLM")
+                error_msg = "Invalid response format from LLM"
+                log_error(error_msg)
+                raise Exception(error_msg)
 
             fixed_code = result.response.strip()
             if not fixed_code:
-                self.logger.error("Fix resulted in empty diagram")
-                raise Exception("Fix resulted in empty diagram")
+                error_msg = "Fix resulted in empty diagram"
+                log_error(error_msg)
+                raise Exception(error_msg)
+
+            log_llm("Fixed diagram successfully", {
+                "content_length": len(fixed_code)
+            })
 
             return fixed_code
         except Exception as e:

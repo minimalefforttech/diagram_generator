@@ -98,7 +98,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleRequestChanges = async (message: string, model: string) => {
+  const handleRequestChanges = async (message: string, model: string, updateCurrent: boolean = false) => {
     if (!diagram.code) {
       toast.error(<ErrorToast message="No diagram to update" />);
       return;
@@ -111,14 +111,18 @@ const App: React.FC = () => {
     }));
 
     try {
-      const response = await diagramService.requestChanges(diagram.id || 'current', {
-        description: message,
-        model,
-        diagramType: currentType.toLowerCase(),
-        options: {
-          agent: { enabled: true },
+      const response = await diagramService.requestChanges(
+        diagram.id || 'current',
+        {
+          description: message,
+          model,
+          diagramType: currentType.toLowerCase(),
+          options: {
+            agent: { enabled: true },
+          },
         },
-      });
+        updateCurrent
+      );
 
       setDiagram(prev => ({
         ...prev,

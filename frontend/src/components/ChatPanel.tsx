@@ -16,7 +16,6 @@ import {
   useTheme,
 } from '@mui/material';
 import ModelSelector from './ModelSelector';
-import PaletteSelector, { DiagramPalette, getPaletteColors } from './PaletteSelector';
 import DiagramTypeSelector from './DiagramTypeSelector';
 import SendIcon from '@mui/icons-material/Send';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -31,7 +30,7 @@ interface Message {
 
 interface ChatPanelProps {
   currentDiagram?: string;
-  onRequestChanges: (message: string, model: string) => void;
+  onRequestChanges: (message: string, model: string, updateCurrent?: boolean) => void;
   onSyntaxChange?: (syntax: string) => void;
   onTypeChange?: (type: string) => void;
 }
@@ -48,7 +47,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   const [selectedModel, setSelectedModel] = useState('');
   const [modelError, setModelError] = useState<string | null>(null);
   const [lastSelectedModel, setLastSelectedModel] = useState('');
-  const [selectedPalette, setSelectedPalette] = useState<DiagramPalette>('greyscale');
   const [currentSyntax, setCurrentSyntax] = useState('mermaid');
   const [currentType, setCurrentType] = useState('auto');
   const [settingsExpanded, setSettingsExpanded] = useState(false);
@@ -113,25 +111,6 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     return enhancedPrompt;
   };
 
-  const handlePaletteChange = (palette: DiagramPalette) => {
-    setSelectedPalette(palette);
-    
-    // Get palette colors
-    const colors = getPaletteColors(palette);
-    const colorMode = theme.palette.mode;
-    
-    // Create a user-friendly message for display
-    const paletteMessage = `Apply these colors to the diagram: ${colors} for a ${colorMode} background theme.`;
-    
-    // Store only the user-visible message in chat history
-    addMessageToHistory(paletteMessage);
-    
-    // Send the enhanced message to the backend
-    if (selectedModel && currentDiagram) {
-      onRequestChanges(createEnhancedPrompt(paletteMessage, true), selectedModel);
-    }
-  };
-
   const addMessageToHistory = (displayContent: string) => {
     const newMessage = {
       role: 'user' as const,
@@ -155,7 +134,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     if (currentDiagram) {
       // Send the enhanced prompt to the backend
       const enhancedPrompt = createEnhancedPrompt(userMessage);
-      onRequestChanges(enhancedPrompt, selectedModel);
+      // Always update existing diagram unless explicitly requested to create new
+      const isNewDiagramRequest = userMessage.toLowerCase().includes("new diagram") || userMessage.toLowerCase().includes("create new");
+      onRequestChanges(enhancedPrompt, selectedModel, !isNewDiagramRequest);
     } else {
       // If no diagram exists yet, send the message as-is
       onRequestChanges(userMessage, selectedModel);
@@ -190,7 +171,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     // Create enhanced message for the backend
     if (currentDiagram) {
       const enhancedPrompt = `Convert the current diagram to ${syntax} syntax while preserving all elements and relationships.`;
-      onRequestChanges(createEnhancedPrompt(enhancedPrompt), selectedModel);
+      onRequestChanges(createEnhancedPrompt(enhancedPrompt), selectedModel, true);
     }
   };
 
@@ -207,7 +188,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     // Create enhanced message for the backend
     if (currentDiagram) {
       const enhancedPrompt = `Convert the current diagram to a ${type} diagram while preserving the core information.`;
-      onRequestChanges(createEnhancedPrompt(enhancedPrompt), selectedModel);
+      onRequestChanges(createEnhancedPrompt(enhancedPrompt), selectedModel, true);
     }
   };
 
@@ -226,11 +207,13 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         borderBottom: 1, 
         borderColor: 'divider', 
         display: 'flex', 
-        justifyContent: 'space-between', 
+        justifyContent: 'space-between',
         alignItems: 'center',
         flexShrink: 0,
         bgcolor: 'background.paper',
         cursor: 'pointer',
+        position: 'relative',
+        zIndex: 2
       }}
       onClick={toggleSettings}
       >
@@ -250,16 +233,21 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 
       {/* Settings Panel */}
       <Collapse in={settingsExpanded}>
-        <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0, bgcolor: 'background.paper' }}>
+        <Box sx={{ 
+          p: 2, 
+          display: 'flex', 
+          flexDirection: 'column', 
+          gap: 2, 
+          flexShrink: 0, 
+          bgcolor: 'background.paper',
+          position: 'relative',
+          zIndex: 1
+        }}>
           <DiagramTypeSelector
             currentSyntax={currentSyntax}
             currentType={currentType}
             onSyntaxChange={handleSyntaxChange}
             onTypeChange={handleTypeChange}
-          />
-          <PaletteSelector
-            selectedPalette={selectedPalette}
-            onChange={handlePaletteChange}
           />
           <ModelSelector
             selectedModel={selectedModel}
@@ -277,7 +265,9 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'flex-end',
-        minHeight: 0
+        minHeight: 0,
+        position: 'relative',
+        zIndex: 0
       }}>
         <List sx={{ 
           flexGrow: 1,

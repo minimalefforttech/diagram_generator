@@ -5,6 +5,8 @@ import requests
 from typing import Dict, List, Optional, Any, Union
 from requests.adapters import HTTPAdapter, Retry
 
+from diagram_generator.backend.api.logs import log_error, log_llm
+
 logger = logging.getLogger(__name__)
 
 class OllamaService:
@@ -36,7 +38,7 @@ class OllamaService:
             response = self.session.get(f"{self.base_url}/api/version")
             return response.status_code == 200
         except Exception as e:
-            logger.error(f"Ollama health check failed: {e}")
+            log_error(f"Ollama health check failed: {e}", exc_info=True)
             return False
 
     def get_available_models(self) -> List[Dict[str, Any]]:
@@ -70,7 +72,7 @@ class OllamaService:
             
         except requests.RequestException as e:
             # Return default model if we can't fetch the list
-            logger.error(f"Failed to fetch models: {e}")
+            log_error(f"Failed to fetch models: {e}", exc_info=True)
             return [{
                 "id": self.model,
                 "name": self.model,
@@ -113,14 +115,28 @@ class OllamaService:
             if not request_data["system"]:
                 del request_data["system"]
                 
+            log_llm("Starting generation", {
+                "model": model or self.model,
+                "temperature": temperature,
+                "prompt_length": len(prompt),
+                "has_system_prompt": bool(system_prompt)
+            })
+            
             response = self.session.post(
                 f"{self.base_url}/api/generate",
                 json=request_data
             )
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+            
+            log_llm("Completed generation", {
+                "response_length": len(result.get("response", "")),
+                "model": model or self.model
+            })
+            
+            return result
             
         except Exception as e:
             error_msg = f"Failed to generate completion: {str(e)}"
-            logger.error(error_msg)
+            log_error(error_msg, exc_info=True)
             raise

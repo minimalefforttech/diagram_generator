@@ -13,7 +13,10 @@ const log = (message: string, details?: any) => {
 };
 
 const api: AxiosInstance = axios.create({
-    baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+    baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
+    headers: {
+        'Content-Type': 'application/json',
+    }
 });
 
 // Add a simple handler to log any API errors
@@ -54,23 +57,26 @@ export const diagramService = {
     }
   },
 
-  async requestChanges(id: string, request: DiagramRequest): Promise<DiagramResponse> {
+  async requestChanges(id: string, request: DiagramRequest, updateCurrent: boolean = false): Promise<DiagramResponse> {
     try {
-        // Use the generate endpoint with the current diagram ID in the request
-        // This will create a new diagram based on the previous one
-        const response = await api.post<DiagramResponse>(
-            '/diagrams/generate',
-            {
-                ...request,
-                previousDiagramId: id
-            }
-        );
+        const endpoint = updateCurrent ? `/diagrams/diagram/${id}/update` : '/diagrams/generate';
+        const payload: any = {
+            description: request.description,
+            syntax_type: request.syntax,
+            model: request.model,
+            options: request.options
+        };
+        if (!updateCurrent) {
+            payload.previousDiagramId = id;
+        }
+        
+        const response = await api.post<DiagramResponse>(endpoint, payload);
         return response.data;
     } catch (error) {
         handleError(error);
         throw error;
     }
-    },
+  },
 
   // Get available syntax types and subtypes
   getSyntaxTypes: async (): Promise<SyntaxTypesResponse> => {

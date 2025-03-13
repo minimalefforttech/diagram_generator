@@ -12,6 +12,11 @@ interface SideBarProps {
   historyRef?: React.RefObject<DiagramHistoryRefHandle>;
 }
 
+// Props for OutputLog component with details dialog state
+interface OutputLogWithDetailsState {
+  detailsOpen: boolean;
+}
+
 export const SideBar: React.FC<SideBarProps> = ({ 
   logs, 
   onSelectDiagram, 
@@ -21,7 +26,25 @@ export const SideBar: React.FC<SideBarProps> = ({
   const [activePanel, setActivePanel] = useState<'logs' | 'history'>('logs');
   const [isExpanded, setIsExpanded] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState('50%');
+  const [outputLogState, setOutputLogState] = useState<OutputLogWithDetailsState>({ detailsOpen: false });
   const sidebarRef = useRef<HTMLDivElement>(null);
+  
+  // Handle outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (isExpanded && 
+          sidebarRef.current && 
+          !sidebarRef.current.contains(event.target as Node) && 
+          !outputLogState.detailsOpen) {
+        setIsExpanded(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isExpanded, outputLogState.detailsOpen]);
   
   // Update sidebarWidth based on window size
   useEffect(() => {
@@ -131,7 +154,11 @@ export const SideBar: React.FC<SideBarProps> = ({
           }
         }}>
           {activePanel === 'logs' ? (
-            <OutputLog entries={logs} alwaysExpanded={true} />
+            <OutputLog 
+              entries={logs} 
+              alwaysExpanded={true}
+              onDetailsOpenChange={(open) => setOutputLogState(prev => ({ ...prev, detailsOpen: open }))}
+            />
           ) : (
             <DiagramHistory 
               ref={historyRef}
