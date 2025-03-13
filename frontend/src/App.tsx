@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { Box, CssBaseline } from '@mui/material';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Layout } from './components';
-import { diagramService } from './services/api';
+import { diagramService, logError } from './services/api';
 import { DiagramState, LogEntry } from './types';
 import { ToastContainer, toast } from 'react-toastify';
 import { ErrorToast } from './components/ErrorToast';
@@ -47,7 +47,8 @@ const App: React.FC = () => {
       code: undefined
     });
     
-    setCurrentType(diagramType || 'auto');
+    const effectiveDiagramType = diagramType === 'auto' ? undefined : diagramType;
+    setCurrentType(effectiveDiagramType || 'auto');
 
     try {
       // First switch to workspace screen - this allows the diagram component to be mounted
@@ -58,7 +59,7 @@ const App: React.FC = () => {
         description,
         model,
         syntax,
-        diagramType,
+        diagramType: effectiveDiagramType,
         options: {
           agent: { enabled: true }
         }
@@ -90,6 +91,8 @@ const App: React.FC = () => {
       const errorMessage = (err.error || (err.response?.data?.error) || 'Failed to generate diagram') + statusDisplay;
       const errorDetails = err.details || err.response?.data || (err.message && { message: err.message });
       
+      await logError(errorMessage, errorDetails);
+      
       setDiagram({
         loading: false,
         error: errorMessage
@@ -111,8 +114,9 @@ const App: React.FC = () => {
     }));
 
     try {
+      // If no diagram.id exists, use generate endpoint instead of update
       const response = await diagramService.requestChanges(
-        diagram.id || 'current',
+        diagram.id,
         {
           description: message,
           model,
@@ -121,7 +125,7 @@ const App: React.FC = () => {
             agent: { enabled: true },
           },
         },
-        updateCurrent
+        diagram.id ? updateCurrent : false // Only use updateCurrent if we have a diagram.id
       );
 
       setDiagram(prev => ({
@@ -149,6 +153,8 @@ const App: React.FC = () => {
       
       const errorMessage = (err.error || (err.response?.data?.error) || 'Failed to update diagram') + statusDisplay;
       const errorDetails = err.details || err.response?.data || (err.message && { message: err.message });
+      
+      await logError(errorMessage, errorDetails);
       
       setDiagram(prev => ({
         ...prev,
@@ -196,6 +202,8 @@ const App: React.FC = () => {
       const errorMessage = (err.error || (err.response?.data?.error) || 'Failed to load diagram from history') + statusDisplay;
       const errorDetails = err.details || err.response?.data || (err.message && { message: err.message });
       
+      await logError(errorMessage, errorDetails);
+      
       setDiagram(prev => ({
         ...prev,
         loading: false,
@@ -210,8 +218,14 @@ const App: React.FC = () => {
       await diagramService.clearLogs();
       setLogs([]);
       toast.success('Logs cleared');
-    } catch (error) {
-      toast.error('Failed to clear logs');
+    } catch (error: any) {
+      const errorMessage = 'Failed to clear logs';
+      const errorDetails = {
+        message: error.message,
+        response: error.response?.data
+      };
+      await logError(errorMessage, errorDetails);
+      toast.error(<ErrorToast message={errorMessage} details={errorDetails} />);
     }
   };
 

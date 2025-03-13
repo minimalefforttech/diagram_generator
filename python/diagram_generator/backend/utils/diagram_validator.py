@@ -32,14 +32,17 @@ class DiagramSubType(Enum):
     """Specific diagram types."""
     AUTO = "auto"
     # Mermaid types
-    FLOWCHART = "flowchart"
-    SEQUENCE = "sequence"
-    CLASS = "class"
-    STATE = "state"
-    ER = "er"
-    GANTT = "gantt"
-    PIE = "pie"
-    MINDMAP = "mindmap"
+    MERMAID_GRAPH = "graph TD"
+    MERMAID_FLOWCHART = "flowchart"
+    MERMAID_SEQUENCE = "sequenceDiagram"
+    MERMAID_CLASS = "classDiagram"
+    MERMAID_STATE = "stateDiagram"
+    MERMAID_ER = "erDiagram"
+    MERMAID_GANTT = "gantt"
+    MERMAID_PIE = "pie"
+    MERMAID_MINDMAP = "mindmap"
+    MERMAID_JOURNEY = "journey"
+    MERMAID_QUADRANT = "quadrantChart"
     # PlantUML types
     PLANTUML_SEQUENCE = "plantuml_sequence"
     PLANTUML_CLASS = "plantuml_class"
@@ -53,10 +56,15 @@ class DiagramSubType(Enum):
     def from_string(cls, value: str) -> 'DiagramSubType':
         """Convert string to DiagramSubType enum."""
         try:
-            # Handle both plain and plantuml-prefixed values
+            # Handle prefixed values
             if value.startswith('plantuml_'):
                 return cls(value)
-            return cls(value.upper())
+            if value.startswith('mermaid_'):
+                # Try to match against enum values
+                for enum_item in cls:
+                    if enum_item.name.lower() == value.lower():
+                        return enum_item
+            return cls(value)
         except ValueError:
             return cls.AUTO
 
@@ -65,8 +73,10 @@ class DiagramSubType(Enum):
         """Get available subtypes for a given syntax."""
         if syntax_type == DiagramType.MERMAID:
             return [
-                cls.FLOWCHART, cls.SEQUENCE, cls.CLASS,
-                cls.STATE, cls.ER, cls.GANTT, cls.PIE, cls.MINDMAP
+                cls.MERMAID_GRAPH, cls.MERMAID_FLOWCHART, cls.MERMAID_SEQUENCE,
+                cls.MERMAID_CLASS, cls.MERMAID_STATE, cls.MERMAID_ER,
+                cls.MERMAID_GANTT, cls.MERMAID_PIE, cls.MERMAID_MINDMAP,
+                cls.MERMAID_JOURNEY, cls.MERMAID_QUADRANT
             ]
         elif syntax_type == DiagramType.PLANTUML:
             return [

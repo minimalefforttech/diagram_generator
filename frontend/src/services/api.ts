@@ -19,11 +19,34 @@ const api: AxiosInstance = axios.create({
     }
 });
 
-// Add a simple handler to log any API errors
-const handleError = (error: any) => {
+// Log error to backend logging system
+export const logError = async (message: string, details?: any) => {
+  try {
+    await api.post('/logs', {
+      type: 'error',
+      message,
+      details
+    });
+  } catch (e) {
+    console.error('Failed to log error:', e);
+  }
+};
+
+// Add a handler to log any API errors
+const handleError = async (error: any) => {
     if (error instanceof axios.AxiosError) {
+        const errorDetails = {
+            url: error.config?.url,
+            method: error.config?.method,
+            status: error.response?.status,
+            statusText: error.response?.statusText,
+            data: error.response?.data,
+            message: error.message
+        };
+        await logError('Failed API request', errorDetails);
         console.error('Failed API request:', error);
     } else {
+        await logError('Unexpected error', { message: error.message });
         console.error('Unexpected error:', error);
     }
 };
@@ -49,7 +72,14 @@ export const diagramService = {
   // Generate a new diagram
   generateDiagram: async (request: DiagramRequest): Promise<DiagramResponse> => {
     try {
-      const response = await api.post('/diagrams/generate', request); // Pass request directly as body
+      const payload = {
+        description: request.description,
+        syntax_type: request.syntax,
+        subtype: request.diagramType || 'auto',
+        model: request.model,
+        options: request.options
+      };
+      const response = await api.post('/diagrams/generate', payload);
       return response.data;
     } catch (error) {
       handleError(error);
@@ -57,16 +87,19 @@ export const diagramService = {
     }
   },
 
-  async requestChanges(id: string, request: DiagramRequest, updateCurrent: boolean = false): Promise<DiagramResponse> {
+  async requestChanges(id: string | undefined, request: DiagramRequest, updateCurrent: boolean = false): Promise<DiagramResponse> {
     try {
-        const endpoint = updateCurrent ? `/diagrams/diagram/${id}/update` : '/diagrams/generate';
+        // If no ID or updateCurrent is false, use generate endpoint
+        const endpoint = id && updateCurrent ? `/diagrams/diagram/${id}/update` : '/diagrams/generate';
         const payload: any = {
             description: request.description,
             syntax_type: request.syntax,
+            subtype: request.diagramType || 'auto',
             model: request.model,
             options: request.options
         };
-        if (!updateCurrent) {
+        // Only include previousDiagramId if we have an ID but aren't updating
+        if (id && !updateCurrent) {
             payload.previousDiagramId = id;
         }
         

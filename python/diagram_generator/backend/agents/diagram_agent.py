@@ -70,6 +70,7 @@ Rules:
 5. For Mermaid diagrams:
    - Use proper node and edge syntax
    - Apply styles with style statements
+   - The first line must always only be the diagram type, eg: [graph TD, sequenceDiagram, gantt, pie, classDiagram, stateDiagram, erDiagram, journey, mindmap, quadrantChart]
 6. For PlantUML diagrams:
    - Use proper @startuml/@enduml tags
    - Use skinparam for styling
