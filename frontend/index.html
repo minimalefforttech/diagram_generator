@@ -6,11 +6,18 @@
     <title>Diagram Generator</title>
     <meta name="description" content="AI-powered diagram generator with support for Mermaid, PlantUML, and C4" />
     <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
-    <!-- PlantUML encoder required for client-side PlantUML processing -->
-    <script src="https://cdn.jsdelivr.net/npm/plantuml-encoder/dist/plantuml-encoder.min.js"></script>
+    <!-- CheerpJ runtime -->
+    <script src="/cheerpj/cheerpj.js"></script>
+    <!-- Optional: CheerpJ worker for better performance -->
+    <script src="/cheerpj/cheerpj_worker.js" async></script>
+    <!-- PlantUML compiled with CheerpJ -->
+    <script src="/plantuml.js" async></script>
   </head>
   <body>
     <div id="root"></div>
+    <!-- CheerpJ root for Java output -->
+    <div id="cheerpj-root"></div>
+    <div id="cheerpj-display"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

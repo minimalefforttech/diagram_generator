@@ -9,6 +9,7 @@ import {
   Menu,
   MenuItem,
   IconButton,
+  Chip,
 } from '@mui/material';
 import { 
   Code as CodeIcon, 
@@ -35,6 +36,8 @@ interface DiagramPanelProps {
   onSyntaxChange?: (syntax: string) => void;
   onTypeChange?: (type: string) => void;
   onToggleCodeEditor?: () => void;
+  syntax?: string; // Added prop for syntax passed from ConfigurationScreen
+  diagramType?: string; // Added prop for diagram type passed from ConfigurationScreen
 }
 
 const DiagramPanel: React.FC<DiagramPanelProps> = ({
@@ -46,70 +49,103 @@ const DiagramPanel: React.FC<DiagramPanelProps> = ({
   onSyntaxChange,
   onTypeChange,
   onToggleCodeEditor,
+  syntax = 'mermaid', // Default to mermaid if not specified
+  diagramType = 'auto', // Default to auto-detect if not specified
 }) => {
   const theme = useTheme();
   const diagramRef = useRef<HTMLDivElement>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [editorValue, setEditorValue] = useState<string>('');
-  const [currentSyntax, setCurrentSyntax] = useState<string>('mermaid');
+  const [currentSyntax, setCurrentSyntax] = useState<string>(syntax);
+  const [currentDiagramType, setCurrentDiagramType] = useState<string>(diagramType);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
-  // Simplified editor mount handler - always use light theme
-  const handleEditorWillMount = (monaco: any) => {
-    monaco.editor.setTheme('mermaidLight');
-  };
-
   // Initialize editor configuration
   useEffect(() => {
     configureMonacoEditor(false); // Always use light theme
   }, []);
 
-  // Update both syntax and type when code changes
+  // Update syntax from props
+  useEffect(() => {
+    if (syntax && syntax !== currentSyntax) {
+      setCurrentSyntax(syntax);
+    }
+  }, [syntax]);
+
+  // Update diagram type from props
+  useEffect(() => {
+    if (diagramType && diagramType !== 'auto') {
+      setCurrentDiagramType(diagramType);
+    }
+  }, [diagramType]);
+
+  // Update both syntax and type when code changes, but only if auto-detect is enabled
   useEffect(() => {
     if (code) {
       setEditorValue(code);
       
-      // Detect syntax and type from code content
-      const lowerCode = code.toLowerCase();
-      
-      // Detect syntax type
-      const newSyntax = lowerCode.includes('@startuml') ? 'plantuml' : 'mermaid';
-      setCurrentSyntax(newSyntax);
-      if (onSyntaxChange) {
-        onSyntaxChange(newSyntax);
-      }
-      
-      // Detect diagram subtype
-      let newType = 'auto';
-      if (lowerCode.includes('graph') || lowerCode.includes('flowchart')) {
-        newType = 'flowchart';
-      } else if (lowerCode.includes('sequencediagram')) {
-        newType = 'sequence';
-      } else if (lowerCode.includes('classdiagram')) {
-        newType = 'class';
-      } else if (lowerCode.includes('statediagram')) {
-        newType = 'state';
-      } else if (lowerCode.includes('erdiagram')) {
-        newType = 'er';
-      } else if (lowerCode.includes('gantt')) {
-        newType = 'gantt';
-      } else if (lowerCode.includes('pie')) {
-        newType = 'pie';
-      } else if (lowerCode.includes('mindmap')) {
-        newType = 'mindmap';
-      } else if (lowerCode.includes('timeline')) {
-        newType = 'timeline';
-      }
-      
-      if (onTypeChange) {
-        onTypeChange(newType);
+      if (diagramType === 'auto') {
+        // Detect syntax and type from code content
+        const lowerCode = code.toLowerCase();
+        
+        // Detect syntax type - PlantUML starts with @start*, Mermaid doesn't
+        const newSyntax = lowerCode.includes('@start') ? 'plantuml' : 'mermaid';
+        setCurrentSyntax(newSyntax);
+        if (onSyntaxChange) {
+          onSyntaxChange(newSyntax);
+        }
+        
+        // Detect diagram subtype
+        let newType = 'auto';
+        
+        // Mermaid-specific types
+        if (newSyntax === 'mermaid') {
+          if (lowerCode.includes('gantt')) {
+            newType = 'gantt';
+          } else if (lowerCode.includes('graph') || lowerCode.includes('flowchart')) {
+            newType = 'flowchart';
+          } else if (lowerCode.includes('sequencediagram')) {
+            newType = 'sequence';
+          } else if (lowerCode.includes('classdiagram')) {
+            newType = 'class';
+          } else if (lowerCode.includes('statediagram')) {
+            newType = 'state';
+          } else if (lowerCode.includes('erdiagram')) {
+            newType = 'er';
+          } else if (lowerCode.includes('pie')) {
+            newType = 'pie';
+          } else if (lowerCode.includes('mindmap')) {
+            newType = 'mindmap';
+          } else if (lowerCode.includes('timeline')) {
+            newType = 'timeline';
+          }
+        } 
+        // PlantUML-specific types
+        else {
+          if (lowerCode.includes('@startgantt')) {
+            newType = 'gantt';
+          } else if (lowerCode.includes('@startmindmap')) {
+            newType = 'mindmap';
+          } else if (lowerCode.includes('@startuml')) {
+            newType = 'uml';
+          } else if (lowerCode.includes('@startwbs')) {
+            newType = 'wbs';
+          } else if (lowerCode.includes('@startjson')) {
+            newType = 'json';
+          }
+        }
+        
+        setCurrentDiagramType(newType);
+        if (onTypeChange) {
+          onTypeChange(newType);
+        }
       }
     }
-  }, [code, onSyntaxChange, onTypeChange]);
+  }, [code, onSyntaxChange, onTypeChange, diagramType]);
 
   // Render diagram when code changes or when showCodeEditor changes
   useEffect(() => {
@@ -128,7 +164,9 @@ const DiagramPanel: React.FC<DiagramPanelProps> = ({
           });
 
           const { svg } = await mermaid.render('diagram', code);
-          diagramRef.current.innerHTML = svg;
+          if (diagramRef.current) {
+            diagramRef.current.innerHTML = svg;
+          }
         }
         // PlantUML rendering is handled by PlantUMLViewer component
       } catch (err) {
@@ -140,6 +178,7 @@ const DiagramPanel: React.FC<DiagramPanelProps> = ({
     renderDiagram();
   }, [code, currentSyntax, showCodeEditor, theme.palette.mode]);
 
+  // ... existing functions (handleDownloadClick, handleMouseDown, etc.) ...
   const handleDownloadClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     setAnchorEl(event.currentTarget);
   };
@@ -251,6 +290,26 @@ const DiagramPanel: React.FC<DiagramPanelProps> = ({
     onCodeChange?.(value || '');
   };
 
+  // Get a user-friendly diagram type name
+  const getDiagramTypeName = (): string => {
+    if (currentDiagramType === 'auto' || !currentDiagramType) {
+      // If auto or not set, infer from code content
+      if (code?.toLowerCase().includes('gantt')) return 'Gantt';
+      if (code?.toLowerCase().includes('mindmap')) return 'MindMap';
+      if (code?.toLowerCase().includes('flowchart') || code?.toLowerCase().includes('graph')) return 'Flowchart';
+      if (code?.toLowerCase().includes('sequencediagram')) return 'Sequence';
+      if (code?.toLowerCase().includes('classdiagram')) return 'Class';
+      if (code?.toLowerCase().includes('@startgantt')) return 'Gantt';
+      if (code?.toLowerCase().includes('@startmindmap')) return 'MindMap';
+      if (code?.toLowerCase().includes('@startuml')) return 'UML';
+      if (code?.toLowerCase().includes('@startwbs')) return 'WBS';
+      return 'Diagram';
+    }
+    
+    // Use the explicitly set diagram type
+    return currentDiagramType.charAt(0).toUpperCase() + currentDiagramType.slice(1);
+  };
+
   return (
     <Paper sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ mb: 2, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
@@ -284,6 +343,13 @@ const DiagramPanel: React.FC<DiagramPanelProps> = ({
         
         {!showCodeEditor && code && (
           <>
+            <Chip 
+              label={`Rendering with: ${currentSyntax === 'mermaid' ? 'Mermaid Viewer' : 'PlantUML Viewer'}`}
+              color={currentSyntax === 'mermaid' ? 'primary' : 'secondary'}
+              size="small"
+              sx={{ mx: 'auto' }}
+            />
+            
             <Button
               variant="outlined"
               size="small"
@@ -331,7 +397,7 @@ const DiagramPanel: React.FC<DiagramPanelProps> = ({
         </Box>
       )}
 
-      {(error || renderError) && (
+      {(error || renderError) && !loading && (
         <Box sx={{ p: 2, color: 'error.main', flexShrink: 0 }}>
           <Typography variant="body2" color="error">
             {error || renderError}
@@ -383,57 +449,77 @@ const DiagramPanel: React.FC<DiagramPanelProps> = ({
           />
         </Box>
       ) : (
-        <Box
-          sx={{
-            flexGrow: 1,
-            minHeight: 0,
-            overflow: 'hidden',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            position: 'relative',
-            cursor: isDragging ? 'grabbing' : 'grab',
-          }}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-          onWheel={handleWheel}
-        >
-          {currentSyntax === 'mermaid' ? (
-            <Box
-              ref={diagramRef}
-              sx={{
-                width: 'fit-content',
-                height: 'fit-content',
-                maxWidth: '100%',
-                maxHeight: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: 2,
-                transform: `scale(${scale}) translate(${position.x}px, ${position.y}px)`,
-                transition: isDragging ? 'none' : 'transform 0.1s ease-out',
-                '& svg': {
+        <>
+          <Box 
+            sx={{ 
+              mb: 1, 
+              px: 2, 
+              display: 'flex', 
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}
+          >
+            <Typography variant="body2" color="textSecondary">
+              <strong>Diagram Type:</strong> {`${currentSyntax.charAt(0).toUpperCase() + currentSyntax.slice(1)} (${getDiagramTypeName()})`}
+            </Typography>
+            
+            <Typography variant="caption" color="textSecondary">
+              Scale: {Math.round(scale * 100)}%
+            </Typography>
+          </Box>
+          
+          <Box
+            sx={{
+              flexGrow: 1,
+              minHeight: 0,
+              overflow: 'hidden',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              position: 'relative',
+              cursor: isDragging ? 'grabbing' : 'grab',
+            }}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onWheel={handleWheel}
+          >
+            {currentSyntax === 'mermaid' ? (
+              <Box
+                ref={diagramRef}
+                sx={{
+                  width: 'fit-content',
+                  height: 'fit-content',
                   maxWidth: '100%',
                   maxHeight: '100%',
-                },
-              }}
-            />
-          ) : currentSyntax === 'plantuml' ? (
-            <PlantUMLViewer 
-              code={code}
-              onError={setRenderError}
-              scale={scale}
-              position={position}
-            />
-          ) : null}
-          {renderError && (
-            <Typography color="error" sx={{ position: 'absolute', bottom: 8, left: 8 }}>
-              {renderError}
-            </Typography>
-          )}
-        </Box>
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 2,
+                  transform: `scale(${scale}) translate(${position.x}px, ${position.y}px)`,
+                  transition: isDragging ? 'none' : 'transform 0.1s ease-out',
+                  '& svg': {
+                    maxWidth: '100%',
+                    maxHeight: '100%',
+                  },
+                }}
+              />
+            ) : currentSyntax === 'plantuml' ? (
+              <PlantUMLViewer 
+                code={code}
+                onError={setRenderError}
+                scale={scale}
+                position={position}
+              />
+            ) : null}
+            {renderError && (
+              <Typography color="error" sx={{ position: 'absolute', bottom: 8, left: 8 }}>
+                {renderError}
+              </Typography>
+            )}
+          </Box>
+        </>
       )}
     </Paper>
   );

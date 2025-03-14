@@ -21,12 +21,15 @@ const DiagramTypeSelector: React.FC<DiagramTypeSelectorProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [syntaxResponse, setSyntaxResponse] = useState<SyntaxTypesResponse | null>(null);
+
+  // Load available syntax types once
   useEffect(() => {
     const loadTypes = async () => {
       try {
         const response = await diagramService.getSyntaxTypes();
         setSyntaxTypes(response.syntax);
-        updateSubtypes(currentSyntax, response);
+        setSyntaxResponse(response);
         setError(null);
       } catch (error) {
         console.error('Failed to load diagram types:', error);
@@ -34,24 +37,28 @@ const DiagramTypeSelector: React.FC<DiagramTypeSelectorProps> = ({
         // Use default values from the API service's error handler
         const defaultTypes = await diagramService.getSyntaxTypes();
         setSyntaxTypes(defaultTypes.syntax);
-        updateSubtypes(currentSyntax, defaultTypes);
+        setSyntaxResponse(defaultTypes);
       } finally {
         setLoading(false);
       }
     };
 
     loadTypes();
-  }, [currentSyntax]);
+  }, []);
 
-  const updateSubtypes = (syntax: string, response: SyntaxTypesResponse) => {
-    const types = response.types[syntax] || [];
-    setSubtypes(['auto', ...types]);
-  };
+  // Update subtypes whenever syntax or response changes
+  useEffect(() => {
+    if (syntaxResponse) {
+      const types = syntaxResponse.types[currentSyntax] || [];
+      setSubtypes(['auto', ...types]);
+    }
+  }, [currentSyntax, syntaxResponse]);
 
-  const handleSyntaxChange = (event: React.ChangeEvent<{ value: unknown }>) => {
-    const newSyntax = event.target.value as string;
+  const handleSyntaxChange = (event: any) => {
+    const newSyntax = event.target.value;
     onSyntaxChange(newSyntax);
-    onTypeChange('auto'); // Reset type when syntax changes
+    // Let the parent component handle type reset
+    onTypeChange('auto');
   };
 
   if (loading) {

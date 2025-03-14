@@ -28,6 +28,22 @@ class DiagramType(Enum):
         """Get list of all diagram type values."""
         return [t.value for t in cls]
 
+# Define PlantUML start tags
+PLANTUML_START_TAGS = {
+    'mindmap': '@startmindmap',
+    'gantt': '@startgantt',
+    'class': '@startuml',  # with class context
+    'sequence': '@startuml',  # with sequence context
+    'state': '@startuml',  # with state context
+    'activity': '@startuml',  # with activity context
+    'component': '@startuml',  # with component context
+    'deployment': '@startuml',  # with deployment context
+    'object': '@startuml',  # with object context
+    'usecase': '@startuml',  # with usecase context
+    'er': '@startuml',  # with ER context
+    'timing': '@startuml'  # with timing context
+}
+
 class DiagramSubType(Enum):
     """Specific diagram types."""
     AUTO = "auto"
@@ -44,13 +60,18 @@ class DiagramSubType(Enum):
     MERMAID_JOURNEY = "journey"
     MERMAID_QUADRANT = "quadrantChart"
     # PlantUML types
-    PLANTUML_SEQUENCE = "plantuml_sequence"
-    PLANTUML_CLASS = "plantuml_class"
-    PLANTUML_ACTIVITY = "plantuml_activity"
-    PLANTUML_COMPONENT = "plantuml_component"
-    PLANTUML_STATE = "plantuml_state"
-    PLANTUML_MINDMAP = "plantuml_mindmap"
-    PLANTUML_GANTT = "plantuml_gantt"
+    PLANTUML_SEQUENCE = "sequence"
+    PLANTUML_CLASS = "class"
+    PLANTUML_ACTIVITY = "activity"
+    PLANTUML_COMPONENT = "component"
+    PLANTUML_STATE = "state"
+    PLANTUML_MINDMAP = "mindmap"
+    PLANTUML_GANTT = "gantt"
+    PLANTUML_DEPLOYMENT = "deployment"
+    PLANTUML_OBJECT = "object"
+    PLANTUML_USECASE = "usecase"
+    PLANTUML_ER = "er"
+    PLANTUML_TIMING = "timing"
 
     @classmethod
     def from_string(cls, value: str) -> 'DiagramSubType':
@@ -80,10 +101,10 @@ class DiagramSubType(Enum):
             ]
         elif syntax_type == DiagramType.PLANTUML:
             return [
-                cls.PLANTUML_SEQUENCE, cls.PLANTUML_CLASS,
-                cls.PLANTUML_ACTIVITY, cls.PLANTUML_COMPONENT,
-                cls.PLANTUML_STATE, cls.PLANTUML_MINDMAP,
-                cls.PLANTUML_GANTT
+                cls.PLANTUML_SEQUENCE, cls.PLANTUML_CLASS, cls.PLANTUML_ACTIVITY,
+                cls.PLANTUML_COMPONENT, cls.PLANTUML_STATE, cls.PLANTUML_MINDMAP,
+                cls.PLANTUML_GANTT, cls.PLANTUML_DEPLOYMENT, cls.PLANTUML_OBJECT,
+                cls.PLANTUML_USECASE, cls.PLANTUML_ER, cls.PLANTUML_TIMING
             ]
         return []
 
@@ -150,12 +171,24 @@ class DiagramValidator:
         lines = code.strip().split('\n')
         cleaned_lines = []
         found_link_style = False
-        
-        for line in lines:
+        is_pie_chart = False
+
+        for i, line in enumerate(lines):
+            # Check if this is a pie chart
+            if i == 0 and line.strip().lower().startswith('pie'):
+                is_pie_chart = True
+                # If line is 'pie title X', keep it, otherwise just use 'pie'
+                if not line.strip().lower().startswith('pie title'):
+                    line = 'pie'
             # Strip trailing semicolons from all lines except those in special sections
             stripped = line.rstrip()
             if stripped.endswith(';'):
                 stripped = stripped[:-1]
+
+            # For pie charts, remove % signs from values
+            if is_pie_chart and i > 0 and '%' in stripped:
+                # Remove % signs from the end of lines, preserving the number
+                stripped = stripped.rstrip('%')
                 
             # Check for linkStyle declarations
             if 'linkStyle' in stripped:
@@ -206,6 +239,24 @@ class DiagramValidator:
                     ["Use 'linkStyle default' instead of numbered linkStyles for consistent styling"]
                 )
 
+        # Validate pie chart values if this is a pie chart
+        if first_word == 'pie':
+            lines = code.split('\n')[1:]  # Skip the pie/title line
+            for line in lines:
+                if line.strip() and not line.strip().startswith('%'):  # Skip empty lines and comments
+                    # Check if the line has a value
+                    parts = line.strip().split(' ')
+                    if len(parts) >= 2:
+                        value = parts[-1].strip('"')  # Remove quotes if present
+                        try:
+                            float(value)  # Try to convert to float
+                        except ValueError:
+                            return ValidationResult(
+                                False,
+                                ["Invalid pie chart value"],
+                                ["Pie chart values must be numbers (not percentages)"]
+                            )
+
         return ValidationResult(True)
 
     @staticmethod
@@ -213,21 +264,68 @@ class DiagramValidator:
         """Validate PlantUML diagram code."""
         code = code.strip()
         
-        if not code.startswith('@startuml') or not code.endswith('@enduml'):
+        # Check for any valid start tag
+        valid_start = any(tag in code.split('\n')[0].lower() for tag in PLANTUML_START_TAGS.values())
+        if not valid_start:
+            available_types = [f"{k} ({v})" for k, v in PLANTUML_START_TAGS.items()]
             return ValidationResult(
                 False,
-                ["Missing @startuml/@enduml tags"],
-                ["Wrap diagram code with @startuml and @enduml"]
+                ["Invalid or missing PlantUML start tag"],
+                [f"Diagram must start with one of: {', '.join(available_types)}"]
+            )
+            
+        # Check for matching end tag
+        if not code.strip().endswith('@enduml'):
+            return ValidationResult(
+                False,
+                ["Missing @enduml tag"],
+                ["Diagram must end with @enduml"]
             )
             
         # Check for content between tags
-        content = code[9:-8].strip()  # Remove tags
+        first_line_end = code.find('\n')
+        if first_line_end == -1:
+            return ValidationResult(
+                False,
+                ["Single line PlantUML diagram"],
+                ["Add content between start and end tags"]
+            )
+            
+        content = code[first_line_end:code.rindex('@enduml')].strip()
         if not content:
             return ValidationResult(
                 False,
                 ["Empty diagram content"],
-                ["Add diagram content between @startuml and @enduml tags"]
+                ["Add diagram content between start and end tags"]
             )
+
+        # Extract diagram type from start tag
+        start_line = code.split('\n')[0].lower()
+        for diagram_type, tag in PLANTUML_START_TAGS.items():
+            if tag in start_line:
+                if diagram_type in ['class', 'sequence', 'state', 'activity', 'component', 'deployment', 'object', 'usecase', 'er', 'timing']:
+                    # For @startuml diagrams, we should look for type-specific syntax
+                    type_indicators = {
+                        'class': ['class ', 'interface ', 'enum '],
+                        'sequence': ['participant ', '-> ', '<- '],
+                        'state': ['state ', '[*] -> '],
+                        'activity': ['start', 'stop', ':'],
+                        'component': ['component ', 'interface ', 'package '],
+                        'deployment': ['node ', 'artifact ', 'database '],
+                        'object': ['object ', 'map '],
+                        'usecase': ['actor ', 'usecase '],
+                        'er': ['entity ', 'relationship '],
+                        'timing': ['clock ', 'binary ']
+                    }
+                    
+                    # Check for type-specific indicators
+                    indicators = type_indicators.get(diagram_type, [])
+                    if not any(indicator in content.lower() for indicator in indicators):
+                        return ValidationResult(
+                            False,
+                            [f"Missing {diagram_type} diagram specific syntax"],
+                            [f"Add {diagram_type}-specific elements like {', '.join(indicators)}"]
+                        )
 
         return ValidationResult(True)
 

@@ -19,6 +19,7 @@ const App: React.FC = () => {
   const [currentScreen, setCurrentScreen] = useState<'configuration' | 'workspace'>('configuration');
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [agentIterations, setAgentIterations] = useState(0);
+  const [currentSyntax, setCurrentSyntax] = useState<string>('mermaid');
   const [currentType, setCurrentType] = useState<string>('auto');
   const queryClient = new QueryClient();
   
@@ -48,6 +49,7 @@ const App: React.FC = () => {
     });
     
     const effectiveDiagramType = diagramType === 'auto' ? undefined : diagramType;
+    setCurrentSyntax(syntax);
     setCurrentType(effectiveDiagramType || 'auto');
 
     try {
@@ -239,7 +241,15 @@ const App: React.FC = () => {
     setAgentIterations(0);
     setCurrentScreen('configuration');
   };
-  
+
+  const handleSyntaxChange = (syntax: string) => {
+    setCurrentSyntax(syntax);
+  };
+
+  const handleTypeChange = (type: string) => {
+    setCurrentType(type);
+  };
+
   const handleStartDiagramGeneration = (config: any) => {
     handleCreateDiagram(
       config.description,
@@ -257,7 +267,11 @@ const App: React.FC = () => {
             <CssBaseline />
             
             {currentScreen === 'configuration' && (
-              <ConfigurationScreen onStartDiagramGeneration={handleStartDiagramGeneration} />
+              <ConfigurationScreen 
+                onStartDiagramGeneration={handleStartDiagramGeneration}
+                onSyntaxChange={handleSyntaxChange}
+                onTypeChange={handleTypeChange}
+              />
             )}
             
             {currentScreen === 'workspace' && (
@@ -269,9 +283,11 @@ const App: React.FC = () => {
                 onNewDiagram={handleNewDiagram}
                 onClearLogs={handleClearLogs}
                 onLoadDiagram={handleLoadDiagram}
-                onSyntaxChange={() => {}} // Remove unused parameter
-                onTypeChange={setCurrentType}
+                onSyntaxChange={handleSyntaxChange}
+                onTypeChange={handleTypeChange}
                 onCodeChange={(code) => setDiagram(prev => ({ ...prev, code }))}
+                syntax={currentSyntax}
+                diagramType={currentType}
               />
             )}
             

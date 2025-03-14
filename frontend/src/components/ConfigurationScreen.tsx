@@ -24,6 +24,8 @@ interface ConfigurationScreenProps {
     syntax: string;
     diagramType?: string;
   }) => void;
+  onSyntaxChange?: (syntax: string) => void;
+  onTypeChange?: (type: string) => void;
 }
 
 const USER_PREFERENCES_KEY = 'diagramGeneratorPreferences';
@@ -36,7 +38,9 @@ interface UserPreferences {
 }
 
 const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
-  onStartDiagramGeneration
+  onStartDiagramGeneration,
+  onSyntaxChange,
+  onTypeChange
 }) => {
   const [description, setDescription] = useState('');
   const [selectedModel, setSelectedModel] = useState('');
@@ -232,7 +236,11 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
             onChange={(e) => {
               const newSyntax = e.target.value;
               setSyntax(newSyntax);
-              savePreferences({ syntax: newSyntax });
+              setDiagramType('auto'); // Reset type when syntax changes
+              savePreferences({ syntax: newSyntax, diagramType: 'auto' });
+              if (onSyntaxChange) {
+                onSyntaxChange(newSyntax);
+              }
             }}
           >
             {renderSyntaxMenuItems()}
@@ -250,6 +258,9 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
               const newType = e.target.value;
               setDiagramType(newType);
               savePreferences({ diagramType: newType });
+              if (onTypeChange) {
+                onTypeChange(newType);
+              }
             }}
           >
             {renderDiagramTypeMenuItems()}

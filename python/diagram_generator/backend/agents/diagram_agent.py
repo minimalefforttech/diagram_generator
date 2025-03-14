@@ -70,9 +70,22 @@ Rules:
 5. For Mermaid diagrams:
    - Use proper node and edge syntax
    - Apply styles with style statements
-   - The first line must always only be the diagram type, eg: [graph TD, sequenceDiagram, gantt, pie, classDiagram, stateDiagram, erDiagram, journey, mindmap, quadrantChart]
+   - First line must be the diagram type: [graph TD, sequenceDiagram, gantt, pie, classDiagram, stateDiagram, erDiagram, journey, mindmap, quadrantChart]
 6. For PlantUML diagrams:
-   - Use proper @startuml/@enduml tags
+   - Must start with the correct tag:
+     * For mindmaps: @startmindmap
+     * For Gantt: @startgantt
+     * For class diagrams: @startuml with class syntax
+     * For sequence diagrams: @startuml with sequence syntax
+     * For state diagrams: @startuml with state syntax
+     * For activity diagrams: @startuml with activity syntax
+     * For component diagrams: @startuml with component syntax
+     * For deployment diagrams: @startuml with deployment syntax
+     * For object diagrams: @startuml with object syntax
+     * For use case diagrams: @startuml with usecase syntax
+     * For ER diagrams: @startuml with entity-relationship syntax
+     * For timing diagrams: @startuml with timing syntax
+   - Must end with @enduml
    - Use skinparam for styling
 
 IMPORTANT: Your entire output must be valid {diagram_type} syntax that can be rendered directly.
@@ -201,70 +214,74 @@ Never generate a new diagram. Only style the existing one.
             raise
 
     def _extract_clean_diagram_code(self, raw_content: str) -> str:
-        """Extract clean diagram code from LLM response, removing explanatory text."""
-        # Method 1: Check for markdown code blocks
+        """Extract clean diagram code from LLM response."""
+        def is_valid_diagram_starter(line: str) -> bool:
+            """Check if a line is a valid diagram starter."""
+            line = line.lower().strip()
+            # Mermaid starters
+            if any(line.startswith(starter) for starter in [
+                "graph ", "flowchart ", "sequencediagram", "classdiagram",
+                "erdiagram", "mindmap", "gantt", "pie", "statediagram"
+            ]):
+                return True
+            # PlantUML starters
+            if any(starter in line for starter in [
+                "@startuml", "@startmindmap", "@startgantt"
+            ]):
+                return True
+            return False
+
+        def extract_from_code_block(block: str) -> str:
+            """Extract and validate diagram code from a code block."""
+            lines = block.strip().split('\n')
+            # Skip any explanatory text before the actual diagram code
+            for i, line in enumerate(lines):
+                if is_valid_diagram_starter(line):
+                    return '\n'.join(lines[i:])
+            return block
+
+        # Method 1: Handle code blocks first
         if "```" in raw_content:
             try:
-                # Extract content between triple backticks for either type
-                code_block_pattern = r"```(?:mermaid|plantuml)?\s*([\s\S]+?)```"
-                matches = re.findall(code_block_pattern, raw_content)
-                if matches:
-                    return matches[0].strip()
+                # Extract all code blocks including with language specifiers
+                code_blocks = re.findall(r"```(?:mermaid|plantuml)?\s*([\s\S]+?)```", raw_content)
+                if code_blocks:
+                    # Process each code block and keep the first valid one
+                    for block in code_blocks:
+                        cleaned = extract_from_code_block(block.strip())
+                        if is_valid_diagram_starter(cleaned.split('\n')[0]):
+                            return cleaned
             except Exception as e:
                 log_error(f"Error extracting code block: {str(e)}")
 
-        # Method 2: Look for known diagram syntax starters
-        lines = raw_content.split("\n")
+        # Method 2: Look for diagram code without code blocks
+        lines = raw_content.split('\n')
+        start_idx = None
+        end_idx = None
+
+        # Find start of diagram code
         for i, line in enumerate(lines):
-            line_lower = line.lower().strip()
-            # Mermaid starters
-            is_mermaid_start = (
-                line_lower.startswith("graph ") or
-                line_lower.startswith("flowchart ") or
-                line_lower.startswith("sequencediagram") or
-                line_lower.startswith("classDiagram") or
-                line_lower.startswith("erdiagram") or
-                line_lower.startswith("mindmap") or
-                line_lower.startswith("gantt") or
-                line_lower.startswith("pie")
-            )
-            # PlantUML starters
-            is_plantuml_start = (
-                line_lower.startswith("@start")
-            )
+            if is_valid_diagram_starter(line):
+                start_idx = i
+                break
 
-            if is_mermaid_start or is_plantuml_start:
-                # Found a diagram starter, now find where it ends
-                diagram_lines = []
-                for j in range(i, len(lines)):
-                    current = lines[j]
-                    # Stop if we hit explanatory text or PlantUML end tag
-                    if (current.strip().lower().startswith("this diagram") or
-                            current.strip().lower().startswith("the diagram") or
-                            current.strip().lower().startswith("here is") or
-                            current.strip().lower().startswith("description:") or
-                            current.strip().lower().startswith("@end")):
-                        # Include the @end tag for PlantUML
-                        if current.strip().lower().startswith("@end"):
-                            diagram_lines.append(current)
-                        break
-                    diagram_lines.append(current)
+        if start_idx is not None:
+            # Find end of diagram code
+            for i in range(start_idx + 1, len(lines)):
+                line = lines[i].lower().strip()
+                # Stop conditions for finding the end of diagram code
+                if (line.startswith(("here", "this diagram", "the diagram", "description:")) or
+                    (line.startswith("@end") and i >= len(lines) - 1)):  # Allow @end if it's near the end
+                    end_idx = i if not line.startswith("@end") else i + 1
+                    break
 
-                if diagram_lines:
-                    return "\n".join(diagram_lines)
+            # If no explicit end was found, include all remaining lines
+            if end_idx is None:
+                end_idx = len(lines)
 
-        # Method 3: If all else fails, remove obvious explanatory text blocks
-        parts = re.split(r"\n\s*\n", raw_content)  # Split by blank lines
-        if len(parts) > 1:
-            # Check if the last part looks like explanatory text
-            last_part = parts[-1].strip().lower()
-            if (last_part.startswith("this diagram") or
-                    last_part.startswith("the diagram") or
-                    last_part.startswith("description:") or
-                    last_part.startswith("here is")):
-                return "\n".join(parts[:-1]).strip()
+            return '\n'.join(lines[start_idx:end_idx]).strip()
 
-        # Just return the cleaned content
+        # Method 3: Clean and return the original content as a last resort
         return raw_content.replace("```mermaid", "").replace("```plantuml", "").replace("```", "").strip()
 
     def _init_state(self, input_data: DiagramAgentInput) -> DiagramAgentState:
@@ -459,6 +476,10 @@ Never generate a new diagram. Only style the existing one.
         # Initialize agent state
         state = self._init_state(input_data)
 
+        # Track consecutive validation failures
+        consecutive_failures = 0
+        max_consecutive_failures = 3
+
         # Agent loop
         while not state.completed:
             # Plan what to do next
@@ -473,6 +494,27 @@ Never generate a new diagram. Only style the existing one.
 
             # Validate the result
             self._validate(state)
+
+            # Check validation result
+            if state.validation_result:
+                if state.validation_result.get("valid", False):
+                    # Success - diagram is valid
+                    state.notes.append("Generated valid diagram")
+                    state.completed = True
+                else:
+                    # Track consecutive failures
+                    consecutive_failures += 1
+                    if consecutive_failures >= max_consecutive_failures:
+                        state.notes.append(f"Failed to generate valid diagram after {consecutive_failures} attempts")
+                        break
+                    elif state.iterations >= options.agent.max_iterations:
+                        state.notes.append(f"Reached maximum iterations ({options.agent.max_iterations})")
+                        break
+                    else:
+                        # Prepare for next iteration
+                        state.iterations += 1
+                        error_summary = ", ".join(state.errors[:2])  # First few errors
+                        state.notes.append(f"Attempt {state.iterations}: Fixing errors ({error_summary})")
 
         # Store results
         self._store_results(state)

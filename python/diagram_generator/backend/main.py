@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from diagram_generator.backend.api import diagrams, ollama, logs
+from diagram_generator.backend.api import diagrams, ollama, logs, plantuml
 
 # Configure logging
 logging.basicConfig(
@@ -55,6 +55,7 @@ async def health_check() -> dict:
 app.include_router(ollama.router)
 app.include_router(diagrams.router)
 app.include_router(logs.router)
+app.include_router(plantuml.router)
 
 def run_server():
     """Entry point for the console script to run the server."""

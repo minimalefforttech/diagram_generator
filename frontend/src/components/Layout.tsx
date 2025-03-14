@@ -27,6 +27,8 @@ export interface LayoutProps {
   onSyntaxChange: (syntax: string) => void;
   onTypeChange: (type: string) => void;
   onCodeChange: (code: string) => void;
+  syntax: string; // Added prop
+  diagramType: string; // Added prop
 }
 
 const Layout: React.FC<LayoutProps> = ({
@@ -39,7 +41,9 @@ const Layout: React.FC<LayoutProps> = ({
   onLoadDiagram,
   onSyntaxChange,
   onTypeChange,
-  onCodeChange
+  onCodeChange,
+  syntax,
+  diagramType
 }) => {
   const { preferences } = useUIPreferences();
   const [showCodeEditor, setShowCodeEditor] = useState<boolean>(false);
@@ -147,6 +151,8 @@ const Layout: React.FC<LayoutProps> = ({
               onSyntaxChange={onSyntaxChange}
               onTypeChange={onTypeChange}
               onToggleCodeEditor={toggleCodeEditor}
+              syntax={syntax}
+              diagramType={diagramType}
             />
           </Box>
 
