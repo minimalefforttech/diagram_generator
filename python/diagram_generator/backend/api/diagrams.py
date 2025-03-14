@@ -16,7 +16,7 @@ from diagram_generator.backend.models.configs import DiagramGenerationOptions
 from diagram_generator.backend.services.ollama import OllamaService
 from .logs import log_llm, log_error
 
-from diagram_generator.backend.storage.database import Storage, ConversationRecord, ConversationMessage
+from diagram_generator.backend.storage.database import Storage, ConversationRecord, ConversationMessage, DiagramRecord
 # Initialize services
 ollama_service = OllamaService()
 diagram_generator = DiagramGenerator(llm_service=ollama_service)
@@ -137,6 +137,22 @@ async def generate_diagram(request: GenerateDiagramRequest) -> Dict:
 
         # Log success/failure
         if result.code and result.valid:
+            # Create and save the diagram record if generation was successful
+            diagram = DiagramRecord(
+                id=result.diagram_id,
+                description=request.description or request.prompt,
+                diagram_type=diagram_type.value,
+                code=result.code,
+                created_at=datetime.now(),
+                metadata={
+                    "description": request.description,
+                    "prompt": request.prompt,
+                    "iterations": result.iterations,
+                    "valid": result.valid
+                }
+            )
+            storage.save_diagram(diagram)
+
             log_llm("Generation successful", {
                 "diagram_type": diagram_type.value,
                 "code": result.code,
@@ -153,7 +169,7 @@ async def generate_diagram(request: GenerateDiagramRequest) -> Dict:
                 "iterations": result.iterations,
                 "valid": result.valid
             })
-          
+        
         return {
             "code": result.code,
             "type": diagram_type.value,

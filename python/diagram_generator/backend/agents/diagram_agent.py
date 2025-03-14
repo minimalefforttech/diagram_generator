@@ -66,12 +66,10 @@ Description: {description}
 
 {context_section}
 
-Example of a valid {diagram_type} diagram in {syntax_type}:
-{example_code}
-
 Rules:
-1. Output ONLY the diagram code exactly as shown in the example
-2. Keep the same diagram type as the example ({diagram_type})
+1. Output ONLY valid {diagram_type} diagram code in {syntax_type} syntax
+2. Keep the diagram type exactly as specified ({diagram_type})
+{example_section}
 3. Preserve indentation and structure exactly
 4. Do not convert to a different diagram type
 5. No explanations, markdown formatting, or backticks
@@ -224,7 +222,7 @@ Preserve the exact structure while only fixing the validation errors."""
             'state': ['state', 'status', 'transition', 'machine'],
             'er': ['entity', 'relationship', 'database', 'schema', 'data model'],
             'mindmap': ['mindmap', 'mind map', 'brainstorm', 'concept map', 'thought process'],
-            'gantt': ['gantt', 'timeline', 'schedule', 'project plan', 'time'],
+            'gantt': ['gantt', 'timeline', 'schedule', 'project plan', 'time', 'project timeline', 'task schedule', 'task timeline'],
             'activity': ['activity', 'process flow', 'workflow steps'],
             'component': ['component', 'architecture', 'system', 'module'],
             'usecase': ['use case', 'user interaction', 'actor', 'system interaction']
@@ -264,12 +262,22 @@ Preserve the exact structure while only fixing the validation errors."""
         # Get syntax-specific rules
         syntax_rules = self._get_syntax_rules(syntax_type)
 
+        # Build example section if example exists
+        example_section = ""
+        if example_code:
+            example_section = f"""
+Example of a valid {specific_type} diagram in {syntax_type}:
+{example_code}
+
+Additional rule: Follow the structure shown in the example above.
+"""
+
         prompt = self.PROMPT_TEMPLATES["generate"].format(
             description=description,
             diagram_type=specific_type,
             syntax_type=syntax_type,
             context_section=context_section,
-            example_code=example_code,
+            example_section=example_section,
             syntax_rules=syntax_rules
         )
 
@@ -657,7 +665,7 @@ Preserve the exact structure while only fixing the validation errors."""
         else:  # plantuml
             if '@startmindmap' in first_line:
                 specific_type = 'mindmap'
-            elif '@startgantt' in first_line:
+            elif '@startgantt' in first_line or 'project' in code.lower():
                 specific_type = 'gantt'
             elif 'class' in code.lower():
                 specific_type = 'class'

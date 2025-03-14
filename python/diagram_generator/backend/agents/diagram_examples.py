@@ -180,9 +180,13 @@ Customer ||--|{ Order
 @endmindmap""",
 
         "gantt": """@startgantt
-[Task 1] lasts 7 days
-then [Task 2] lasts 5 days
-then [Task 3] lasts 10 days
+project starts 2024-01-01
+[Task A] lasts 10 days
+[Task B] starts 2024-01-05 and lasts 15 days
+[Task C] starts after [Task A] and lasts 10 days
+[Task D] starts after [Task B] and lasts 10 days
+[Task E] starts after [Task C] and lasts 5 days
+[Task F] starts after [Task D] and lasts 8 days
 @endgantt"""
     }
 
@@ -218,4 +222,4 @@ then [Task 3] lasts 10 days
         }
         
         normalized_type = type_mapping.get(diagram_type.lower(), diagram_type.lower())
-        return examples.get(normalized_type, examples['flowchart'])
+        return examples.get(normalized_type)  # Return None if type not found
