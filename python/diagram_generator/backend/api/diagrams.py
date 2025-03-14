@@ -148,7 +148,7 @@ async def generate_diagram(request: GenerateDiagramRequest) -> Dict:
             cleaned_code = DiagramValidator._clean_plantuml_code(cleaned_code)
             
         # Log successful generation
-        log_llm("Generated diagram successfully", {
+        log_llm("Generation finished", {
             "code": cleaned_code,
             "notes": notes
         })
@@ -401,13 +401,36 @@ async def delete_diagram(diagram_id: str) -> Dict[str, str]:
 async def clear_history() -> Dict[str, str]:
     """Clear all diagram history."""
     try:
+        # Log the clear request
+        log_llm("Clearing all diagram history")
+        
+        # Get initial count to report how many were deleted
+        initial_count = len(storage.get_all_diagrams())
+        
+        # Clear all diagrams
         storage.clear_diagrams()
-        return {"status": "success", "message": "All diagrams deleted successfully"}
+        
+        # Log success
+        log_llm("Successfully cleared diagram history", {"deleted_count": initial_count})
+        
+        return {
+            "status": "success", 
+            "message": f"All diagrams deleted successfully ({initial_count} diagrams)",
+            "state": {
+                "diagrams_deleted": initial_count,
+                "success": True
+            }
+        }
     except Exception as e:
         error_msg = f"Failed to clear diagram history: {str(e)}"
         log_error(error_msg)
         traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail=error_msg
-        )
+        
+        return {
+            "status": "error",
+            "message": error_msg,
+            "state": {
+                "success": False,
+                "error": str(e)
+            }
+        }

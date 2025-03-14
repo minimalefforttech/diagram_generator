@@ -4,7 +4,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from datetime import datetime
-from typing import List, Optional, Any, Literal
+from typing import List, Optional, Any, Literal, Dict
 
 import sys
 import os
@@ -41,6 +41,7 @@ def add_entry(type: str, message: str, details: Any = None) -> LogRecord:
         timestamp=datetime.utcnow(),
         details=details
     )
+    print(entry)
     storage.save_log(entry)
     return entry
 
@@ -65,9 +66,9 @@ router = APIRouter(
 )
 
 @router.get("")
-async def get_logs() -> List[LogRecord]:
-    """Get all log entries."""
-    return storage.get_logs()
+async def get_logs() -> Dict[str, List[LogRecord]]:
+    """Get all log entries in format expected by frontend."""
+    return {"logs": storage.get_logs()}
 
 @router.post("")
 async def create_log(request: CreateLogRequest) -> LogRecord:

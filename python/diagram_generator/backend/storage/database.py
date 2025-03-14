@@ -86,20 +86,20 @@ class Storage:
         self.index = self._load_index()
         
     def _load_index(self) -> Dict[str, Dict[str, Any]]:
-        """Load storage index from disk.
+        """Load storage index from disk (keeping logs in memory).
         
         Returns:
             dict: Storage index
         """
+        # Always start with empty logs array
         default_index = {"diagrams": {}, "conversations": {}, "logs": []}
         if self.index_path.exists():
             try:
                 index = json.loads(self.index_path.read_text())
-                # Ensure all required keys exist with default values
-                for key, default_value in default_index.items():
-                    if key not in index:
-                        index[key] = default_value
-                return index
+                # Only load diagrams and conversations from disk
+                default_index["diagrams"] = index.get("diagrams", {})
+                default_index["conversations"] = index.get("conversations", {})
+                return default_index
             except json.JSONDecodeError as e:
                 error_msg = "Failed to parse index file, creating new one"
                 self.log_exception(error_msg, e)
@@ -107,9 +107,14 @@ class Storage:
         return default_index
         
     def _save_index(self) -> None:
-        """Save storage index to disk."""
+        """Save storage index to disk (excluding logs)."""
         try:
-            self.index_path.write_text(json.dumps(self.index, indent=2))
+            # Create a copy of the index without logs
+            persistent_index = {
+                "diagrams": self.index["diagrams"],
+                "conversations": self.index["conversations"]
+            }
+            self.index_path.write_text(json.dumps(persistent_index, indent=2))
         except Exception as e:
             logger.error(f"Failed to save index file: {str(e)}", exc_info=True)
             raise StorageError("Failed to save index file")
@@ -135,7 +140,7 @@ class Storage:
         logger.error(message, extra={"details": details}, exc_info=True)
 
     def save_log(self, log: LogRecord) -> None:
-        """Save a log record.
+        """Save a log record in memory.
         
         Args:
             log: Log record to save
@@ -144,14 +149,12 @@ class Storage:
         log_dict = log.model_dump()
         log_dict["timestamp"] = log_dict["timestamp"].isoformat()
         
-        # Add to index
+        # Add to in-memory logs only
         self.index["logs"].append(log_dict)
         
         # Keep only last 1000 logs
         if len(self.index["logs"]) > 1000:
             self.index["logs"] = self.index["logs"][-1000:]
-            
-        self._save_index()
 
     def get_logs(self) -> List[LogRecord]:
         """Get all log records.
@@ -162,9 +165,8 @@ class Storage:
         return [LogRecord(**log) for log in self.index.get("logs", [])]
 
     def clear_logs(self) -> None:
-        """Clear all log records."""
+        """Clear all log records from memory."""
         self.index["logs"] = []
-        self._save_index()
         
     def save_diagram(self, diagram: DiagramRecord) -> None:
         """Save a diagram record.

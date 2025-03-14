@@ -1,53 +1,47 @@
+import { AgentConfig } from './configs';
+
 export interface DiagramState {
-    loading: boolean;
-    code?: string;
-    error?: string;
-    id?: string;
+  loading: boolean;
+  code?: string;
+  error?: string;
+  id?: string;
 }
 
-export interface DiagramRequest {
-    description: string;
-    model?: string;
-    syntax?: string;
-    diagramType?: string;
-    options?: Record<string, any>;
-    previousDiagramId?: string;
-}
-
-export interface DiagramResponse {
-    code: string;
-    type: string;
-    subtype?: string;
-    notes?: string[];
-    id?: string;
-}
-
+// Must match backend LogEntry
 export interface LogEntry {
-    timestamp: string;
-    level: string;
-    message: string;
-    details?: Record<string, any>;
+  timestamp: string;
+  level: string;
+  type: string;
+  message: string;
+  details?: Record<string, any>;
 }
 
-export interface SyntaxTypesResponse {
-    syntax: string[];
-    types: {
-        [key: string]: string[];
-    };
+export interface GenerationOptions {
+  agent?: AgentConfig;
+  rag?: {
+    enabled: boolean;
+    api_doc_dir: string;
+  };
 }
 
-export interface ModelInfo {
-    name: string;
-    size?: string;
-    family?: string;
-    quantized?: boolean;
-    parameters?: string;
-}
+// Diagram types & syntax
+export const DIAGRAM_TYPES = {
+  graph: 'Graph',
+  sequence: 'Sequence',
+  class: 'Class',
+  state: 'State',
+  er: 'Entity Relationship',
+  gantt: 'Gantt',
+  pie: 'Pie',
+  flowchart: 'Flowchart',
+  mindmap: 'Mind Map',
+  timeline: 'Timeline',
+} as const;
 
-export interface DiagramHistoryItem {
-    id: string;
-    description: string;
-    syntax: string;
-    createdAt: string;
-    iterations?: number;
-}
+export const DIAGRAM_SYNTAX = {
+  mermaid: 'Mermaid',
+  plantuml: 'PlantUML',
+} as const;
+
+export type DiagramType = keyof typeof DIAGRAM_TYPES;
+export type DiagramSyntax = keyof typeof DIAGRAM_SYNTAX;

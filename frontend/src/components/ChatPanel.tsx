@@ -20,6 +20,7 @@ import DiagramTypeSelector from './DiagramTypeSelector';
 import SendIcon from '@mui/icons-material/Send';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -33,6 +34,7 @@ interface ChatPanelProps {
   onRequestChanges: (message: string, model: string, updateCurrent?: boolean) => void;
   onSyntaxChange?: (syntax: string) => void;
   onTypeChange?: (type: string) => void;
+  onRagDirectoryChange?: (directory: string) => void;
 }
 
 const ChatPanel: React.FC<ChatPanelProps> = ({
@@ -40,6 +42,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   onRequestChanges,
   onSyntaxChange,
   onTypeChange,
+  onRagDirectoryChange
 }) => {
   const theme = useTheme();
   const [message, setMessage] = useState('');
@@ -50,6 +53,18 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   const [currentSyntax, setCurrentSyntax] = useState('mermaid');
   const [currentType, setCurrentType] = useState('auto');
   const [settingsExpanded, setSettingsExpanded] = useState(false);
+  const [ragDirectory, setRagDirectory] = useState(() => {
+    try {
+      const savedPrefs = localStorage.getItem('diagramGeneratorPreferences');
+      if (savedPrefs) {
+        const prefs = JSON.parse(savedPrefs);
+        return prefs.rag?.api_doc_dir || '';
+      }
+    } catch (error) {
+      console.error('Error loading RAG preferences:', error);
+    }
+    return '';
+  });
 
   const toggleSettings = () => {
     setSettingsExpanded(!settingsExpanded);
@@ -192,6 +207,34 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     }
   };
 
+  const handleLoadRag = () => {
+    if (ragDirectory) {
+      // Save to localStorage
+      try {
+        const savedPrefs = localStorage.getItem('diagramGeneratorPreferences');
+        const prefs = savedPrefs ? JSON.parse(savedPrefs) : {};
+        localStorage.setItem('diagramGeneratorPreferences', JSON.stringify({
+          ...prefs,
+          rag: {
+            ...prefs.rag,
+            api_doc_dir: ragDirectory
+          }
+        }));
+      } catch (error) {
+        console.error('Error saving RAG preferences:', error);
+      }
+
+      // Add a message to chat history
+      const displayMessage = `Loading RAG context from: ${ragDirectory}`;
+      addMessageToHistory(displayMessage);
+
+      // Notify parent component
+      if (onRagDirectoryChange) {
+        onRagDirectoryChange(ragDirectory);
+      }
+    }
+  };
+
   return (
     <Paper sx={(theme) => ({
       flexGrow: 1,
@@ -253,6 +296,26 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
             selectedModel={selectedModel}
             onModelChange={handleModelChange}
           />
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+            <TextField
+              fullWidth
+              label="RAG Directory"
+              value={ragDirectory}
+              onChange={(e) => setRagDirectory(e.target.value)}
+              size="small"
+              helperText="Path to directory containing code/documentation"
+            />
+            <Button
+              variant="contained"
+              size="medium"
+              startIcon={<FolderOpenIcon />}
+              onClick={handleLoadRag}
+              disabled={!ragDirectory}
+              sx={{ mt: '3px' }}
+            >
+              Load
+            </Button>
+          </Box>
         </Box>
       </Collapse>
 

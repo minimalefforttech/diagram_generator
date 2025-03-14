@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   Box,
   TextField,
@@ -10,19 +10,39 @@ import {
   MenuItem,
   Paper,
   FormHelperText,
-  CircularProgress
+  CircularProgress,
+  Switch,
+  FormControlLabel,
+  IconButton,
+  InputAdornment,
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { diagramService } from '../services/api';
 import ThemeToggle from './ThemeToggle';
 import { ModelInfo } from '../types';
+import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 
+// Add webkitdirectory to HTMLInputElement
+declare module 'react' {
+  interface HTMLAttributes<T> extends AriaAttributes, DOMAttributes<T> {
+    webkitdirectory?: string;
+    directory?: string;
+  }
+}
+
+// Component Props
 interface ConfigurationScreenProps {
   onStartDiagramGeneration: (config: {
     description: string;
     model: string;
     syntax: string;
     diagramType?: string;
+    options?: {
+      rag?: {
+        enabled: boolean;
+        api_doc_dir: string;
+      };
+    };
   }) => void;
   onSyntaxChange?: (syntax: string) => void;
   onTypeChange?: (type: string) => void;
@@ -30,11 +50,14 @@ interface ConfigurationScreenProps {
 
 const USER_PREFERENCES_KEY = 'diagramGeneratorPreferences';
 
-// Define the preferences structure
 interface UserPreferences {
   model?: string;
   syntax?: string;
   diagramType?: string;
+  rag?: {
+    enabled: boolean;
+    api_doc_dir: string;
+  };
 }
 
 const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
@@ -48,7 +71,12 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
   const [diagramType, setDiagramType] = useState('auto');
   const [error, setError] = useState<string | null>(null);
   const [preferences, setPreferences] = useState<UserPreferences>({});
+  const [ragEnabled, setRagEnabled] = useState(false);
+  const [ragDirectory, setRagDirectory] = useState('');
+  const directoryInputRef = useRef<HTMLInputElement>(null);
 
+  // Rest of the component code remains the same...
+  // Copy from the previous version starting from modelsQuery definition
   const modelsQuery = useQuery<ModelInfo[]>({
     queryKey: ['models'],
     queryFn: () => diagramService.getAvailableModels("ollama")
@@ -67,14 +95,16 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
         const parsedPrefs = JSON.parse(savedPrefs) as UserPreferences;
         setPreferences(parsedPrefs);
         
-        // Only set syntax and diagram type immediately
         if (parsedPrefs.syntax) {
           setSyntax(parsedPrefs.syntax);
         }
         if (parsedPrefs.diagramType) {
           setDiagramType(parsedPrefs.diagramType);
         }
-        // Model will be set after models are loaded
+        if (parsedPrefs.rag) {
+          setRagEnabled(parsedPrefs.rag.enabled);
+          setRagDirectory(parsedPrefs.rag.api_doc_dir);
+        }
       }
     } catch (error) {
       console.error('Failed to load preferences:', error);
@@ -84,7 +114,6 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
   // Set selected model from preferences after models are loaded
   useEffect(() => {
     if (modelsQuery.isSuccess && modelsQuery.data && preferences.model && !selectedModel) {
-      // Check if the saved model is still available
       const modelExists = modelsQuery.data.some(model => 
         model.name === preferences.model || model.id === preferences.model
       );
@@ -95,7 +124,6 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
     }
   }, [modelsQuery.isSuccess, modelsQuery.data, preferences.model, selectedModel]);
 
-  // Save preferences when they change
   const savePreferences = (prefs: Partial<UserPreferences>) => {
     try {
       const updatedPrefs = { ...preferences, ...prefs };
@@ -103,6 +131,32 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
       localStorage.setItem(USER_PREFERENCES_KEY, JSON.stringify(updatedPrefs));
     } catch (error) {
       console.error('Failed to save preferences:', error);
+    }
+  };
+
+  const saveRagPreferences = (enabled: boolean, directory: string) => {
+    savePreferences({
+      rag: {
+        enabled,
+        api_doc_dir: directory
+      }
+    });
+  };
+
+  // Handle directory selection
+  const handleDirectorySelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files && files[0]) {
+      // Get the directory path from the file
+      const directory = files[0].webkitRelativePath.split('/')[0];
+      setRagDirectory(directory);
+      saveRagPreferences(ragEnabled, directory);
+    }
+  };
+
+  const openDirectoryDialog = () => {
+    if (directoryInputRef.current) {
+      directoryInputRef.current.click();
     }
   };
 
@@ -121,11 +175,21 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
       setError('Please enter a description');
       return;
     }
+    if (ragEnabled && !ragDirectory.trim()) {
+      setError('Please select a RAG directory');
+      return;
+    }
     onStartDiagramGeneration({
       description,
       model: selectedModel,
       syntax,
-      diagramType: diagramType === 'auto' ? undefined : diagramType
+      diagramType: diagramType === 'auto' ? undefined : diagramType,
+      options: {
+        rag: ragEnabled ? {
+          enabled: true,
+          api_doc_dir: ragDirectory
+        } : undefined
+      }
     });
   };
 
@@ -236,7 +300,7 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
             onChange={(e) => {
               const newSyntax = e.target.value;
               setSyntax(newSyntax);
-              setDiagramType('auto'); // Reset type when syntax changes
+              setDiagramType('auto');
               savePreferences({ syntax: newSyntax, diagramType: 'auto' });
               if (onSyntaxChange) {
                 onSyntaxChange(newSyntax);
@@ -268,6 +332,59 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
           <FormHelperText>Select the specific diagram type or let the system detect it</FormHelperText>
         </FormControl>
 
+        <FormControlLabel
+          control={
+            <Switch
+              checked={ragEnabled}
+              onChange={(e) => {
+                const enabled = e.target.checked;
+                setRagEnabled(enabled);
+                saveRagPreferences(enabled, ragDirectory);
+                if (!enabled) {
+                  setError(null);
+                }
+              }}
+              color="primary"
+            />
+          }
+          label="Enable RAG"
+        />
+
+        {ragEnabled && (
+          <>
+            <TextField
+              fullWidth
+              label="RAG Directory"
+              value={ragDirectory}
+              onChange={(e) => {
+                const directory = e.target.value;
+                setRagDirectory(directory);
+                saveRagPreferences(ragEnabled, directory);
+              }}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton onClick={openDirectoryDialog} edge="end">
+                      <FolderOpenIcon />
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+              error={ragEnabled && error?.includes('RAG directory')}
+              helperText="Path to directory containing code/documentation"
+            />
+            <input
+              type="file"
+              ref={directoryInputRef}
+              onChange={handleDirectorySelect}
+              style={{ display: 'none' }}
+              // @ts-ignore -- directory input attributes
+              webkitdirectory=""
+              directory=""
+            />
+          </>
+        )}
+
         <TextField
           fullWidth
           multiline
@@ -278,7 +395,7 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
             setDescription(e.target.value);
             setError(null);
           }}
-          error={!!error}
+          error={!!error && !error.includes('RAG directory')}
           helperText={error || "Describe the diagram you want to create"}
         />
 

@@ -18,7 +18,7 @@ const App: React.FC = () => {
   });
   const [currentScreen, setCurrentScreen] = useState<'configuration' | 'workspace'>('configuration');
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [agentIterations, setAgentIterations] = useState(0);
+  const [agentIterations, setAgentIterations] = useState<number>(0);
   const [currentSyntax, setCurrentSyntax] = useState<string>('mermaid');
   const [currentType, setCurrentType] = useState<string>('auto');
   const queryClient = new QueryClient();
@@ -27,14 +27,18 @@ const App: React.FC = () => {
   const sidebarRef = useRef<{ refreshHistory: () => void }>(null);
 
   const loadInitialContext = async () => {
-    // Load initial logs
-    const initialLogs = await diagramService.getLogs();
-    setLogs(initialLogs);
-    // Set up log polling
-    setInterval(async () => {
-      const subsequentLogs = await diagramService.getLogs();
-      setLogs(subsequentLogs);
-    }, 5000);
+    try {
+      // Load initial logs
+      const initialLogs = await diagramService.getLogs();
+      setLogs(initialLogs);
+      // Set up log polling
+      setInterval(async () => {
+        const subsequentLogs = await diagramService.getLogs();
+        setLogs(subsequentLogs);
+      }, 5000);
+    } catch (error) {
+      console.error('Failed to load initial context:', error);
+    }
   };
 
   useEffect(() => {
@@ -76,8 +80,8 @@ const App: React.FC = () => {
       });
       
       if (response.id) {
-        const iterations = await diagramService.getAgentIterations(response.id);
-        setAgentIterations(iterations);
+        const iterationResponse = await diagramService.getAgentIterations(response.id);
+        setAgentIterations(iterationResponse.current_iteration);
         
         // Refresh the history list after successful diagram creation
         if (sidebarRef.current) {
@@ -93,7 +97,7 @@ const App: React.FC = () => {
       const errorMessage = (err.error || (err.response?.data?.error) || 'Failed to generate diagram') + statusDisplay;
       const errorDetails = err.details || err.response?.data || (err.message && { message: err.message });
       
-      await logError(errorMessage, errorDetails);
+      await logError({ error: errorMessage, details: errorDetails }, 'Generate Diagram');
       
       setDiagram({
         loading: false,
@@ -116,18 +120,13 @@ const App: React.FC = () => {
     }));
 
     try {
+      const diagramId = diagram.id || 'current';
+      
       // If no diagram.id exists, use generate endpoint instead of update
       const response = await diagramService.requestChanges(
-        diagram.id,
-        {
-          description: message,
-          model,
-          diagramType: currentType.toLowerCase(),
-          options: {
-            agent: { enabled: true },
-          },
-        },
-        diagram.id ? updateCurrent : false // Only use updateCurrent if we have a diagram.id
+        diagramId,
+        message,
+        model
       );
 
       setDiagram(prev => ({
@@ -138,14 +137,11 @@ const App: React.FC = () => {
         id: response.id || prev.id
       }));
       
-      if (response.id || diagram.id) {
-        const iterations = await diagramService.getAgentIterations(response.id || diagram.id || 'current');
-        setAgentIterations(iterations);
+      setAgentIterations(response.current_iteration || 0);
         
-        // Refresh the history list after successful diagram update
-        if (sidebarRef.current) {
-          sidebarRef.current.refreshHistory();
-        }
+      // Refresh the history list after successful diagram update
+      if (sidebarRef.current) {
+        sidebarRef.current.refreshHistory();
       }
     } catch (err: any) {
       // Extract HTTP status code for Axios errors
@@ -156,7 +152,7 @@ const App: React.FC = () => {
       const errorMessage = (err.error || (err.response?.data?.error) || 'Failed to update diagram') + statusDisplay;
       const errorDetails = err.details || err.response?.data || (err.message && { message: err.message });
       
-      await logError(errorMessage, errorDetails);
+      await logError({ error: errorMessage, details: errorDetails }, 'Update Diagram');
       
       setDiagram(prev => ({
         ...prev,
@@ -189,8 +185,8 @@ const App: React.FC = () => {
       });
       
       // Fetch agent iterations
-      const iterations = await diagramService.getAgentIterations(diagramId);
-      setAgentIterations(iterations);
+      const iterationResponse = await diagramService.getAgentIterations(diagramId);
+      setAgentIterations(iterationResponse.current_iteration);
       
       toast.success('Diagram loaded from history');
     } catch (err: any) {
@@ -204,7 +200,7 @@ const App: React.FC = () => {
       const errorMessage = (err.error || (err.response?.data?.error) || 'Failed to load diagram from history') + statusDisplay;
       const errorDetails = err.details || err.response?.data || (err.message && { message: err.message });
       
-      await logError(errorMessage, errorDetails);
+      await logError({ error: errorMessage, details: errorDetails }, 'Load Diagram');
       
       setDiagram(prev => ({
         ...prev,
@@ -226,7 +222,7 @@ const App: React.FC = () => {
         message: error.message,
         response: error.response?.data
       };
-      await logError(errorMessage, errorDetails);
+      await logError({ error: errorMessage, details: errorDetails }, 'Clear Logs');
       toast.error(<ErrorToast message={errorMessage} details={errorDetails} />);
     }
   };

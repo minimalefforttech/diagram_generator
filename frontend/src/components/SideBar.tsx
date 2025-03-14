@@ -78,10 +78,13 @@ export const SideBar: React.FC<SideBarProps> = ({
         height: 'calc(100vh - 128px)',
         zIndex: 1000,
         width: isExpanded ? sidebarWidth : '48px',
-        transition: 'width 0.3s ease',
+        transition: 'width 0.3s ease, box-shadow 0.3s ease',
         display: 'flex',
         overflow: 'hidden',
-        borderRadius: '0 8px 8px 0' // Round the right side
+        borderRadius: '0 8px 8px 0', // Round the right side
+        boxShadow: isExpanded 
+          ? '4px 0px 20px rgba(0, 0, 0, 0.3)' 
+          : 'none'
       }}
     >
       <Box
@@ -100,12 +103,15 @@ export const SideBar: React.FC<SideBarProps> = ({
       >
         <Tooltip title="History" placement="right">
           <IconButton
-            color={activePanel === 'history' ? 'primary' : 'default'}
+            color={(activePanel === 'history' && isExpanded) ? 'primary' : 'default'}
             onClick={() => {
-              setActivePanel('history');
-              setIsExpanded(prev => !prev);
-              // Refresh history when opening the panel
-              if (!isExpanded || activePanel !== 'history') {
+              if (activePanel === 'history') {
+                // If already active, toggle expanded state
+                setIsExpanded(prev => !prev);
+              } else {
+                // If not active, set active and expand
+                setActivePanel('history');
+                setIsExpanded(true);
                 refreshHistory();
               }
             }}
@@ -115,10 +121,16 @@ export const SideBar: React.FC<SideBarProps> = ({
         </Tooltip>
         <Tooltip title="Logs" placement="right">
           <IconButton
-            color={activePanel === 'logs' ? 'primary' : 'default'}
+            color={(activePanel === 'logs' && isExpanded) ? 'primary' : 'default'}
             onClick={() => {
-              setActivePanel('logs');
-              setIsExpanded(prev => !prev);
+              if (activePanel === 'logs') {
+                // If already active, toggle expanded state
+                setIsExpanded(prev => !prev);
+              } else {
+                // If not active, set active and expand
+                setActivePanel('logs');
+                setIsExpanded(true);
+              }
             }}
           >
             <ArticleIcon />

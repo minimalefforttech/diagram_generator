@@ -1,255 +1,211 @@
-import axios, { AxiosInstance } from 'axios';
+import axios from 'axios';
 import { 
-    DiagramRequest, 
-    DiagramResponse, 
-    LogEntry, 
-    SyntaxTypesResponse,
-    ModelInfo,
-    DiagramHistoryItem
-} from '../types';
+  DiagramGenerationRequest, 
+  DiagramGenerationResponse, 
+  ModelInfo, 
+  ModelResponse,
+  SyntaxTypes, 
+  DiagramModifyRequest,
+  LogEntry,
+  AgentIteration,
+  AgentIterationResponse,
+  Diagram,
+  RequestChangesResponse,
+  DiagramHistoryItem,
+} from '../types/generation';
 
-const log = (message: string, details?: any) => {
-    console.log(`[API] ${message}`, details);
-};
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-const api: AxiosInstance = axios.create({
-    baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
-    headers: {
-        'Content-Type': 'application/json',
-    }
+const api = axios.create({
+  baseURL: BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
-// Log error to backend logging system
-export const logError = async (message: string, details?: any) => {
-  try {
-    await api.post('/logs', {
-      type: 'error',
-      message,
-      details
-    });
-  } catch (e) {
-    console.error('Failed to log error:', e);
-  }
+interface ErrorResponse {
+  error: string;
+  details?: string;
+}
+
+// Error logging utility
+export const logError = (error: any, context?: string): Record<string, any> => {
+  const errorMessage = error?.response?.data?.error || error?.message || String(error);
+  const errorDetails = {
+    message: errorMessage,
+    context: context || 'API Error',
+    timestamp: new Date().toISOString(),
+    type: 'error',  // Added required type field
+    details: error?.response?.data || error,
+    level: 'error'  // Added for LogEntry compatibility
+  };
+  console.error(`[${errorDetails.context}]:`, errorDetails);
+  return errorDetails;
 };
 
-// Add a handler to log any API errors
-const handleError = async (error: any) => {
-    if (error instanceof axios.AxiosError) {
-        const errorDetails = {
-            url: error.config?.url,
-            method: error.config?.method,
-            status: error.response?.status,
-            statusText: error.response?.statusText,
-            data: error.response?.data,
-            message: error.message
-        };
-        await logError('Failed API request', errorDetails);
-        console.error('Failed API request:', error);
-    } else {
-        await logError('Unexpected error', { message: error.message });
-        console.error('Unexpected error:', error);
-    }
-};
-
-api.interceptors.request.use((req) => {
-    if (req.url?.includes('/diagrams/')) {
-        log('HTTP request', req.data);
-    }
-    return req;
-});
-
-api.interceptors.response.use((res) => {
-    log('HTTP response', res.data);
-    return res;
-});
-
-// --------------------------------------------------------------------------
-// API functions & methods
-// --------------------------------------------------------------------------
-
-// API service for diagram generation and management
 export const diagramService = {
-  // Generate a new diagram
-  generateDiagram: async (request: DiagramRequest): Promise<DiagramResponse> => {
+  async generateDiagram(
+    request: DiagramGenerationRequest
+  ): Promise<DiagramGenerationResponse> {
     try {
-      const payload = {
-        description: request.description,
-        syntax_type: request.syntax,
-        subtype: request.diagramType || 'auto',
-        model: request.model,
-        options: request.options
-      };
-      const response = await api.post('/diagrams/generate', payload);
+      const response = await api.post<DiagramGenerationResponse>('/diagrams/generate', request);
       return response.data;
     } catch (error) {
-      handleError(error);
-      throw error;
+      throw logError(error, 'Generate Diagram');
     }
   },
 
-  async requestChanges(id: string | undefined, request: DiagramRequest, updateCurrent: boolean = false): Promise<DiagramResponse> {
+  async getAvailableModels(provider: string): Promise<ModelInfo[]> {
     try {
-        // If no ID or updateCurrent is false, use generate endpoint
-        const endpoint = id && updateCurrent ? `/diagrams/diagram/${id}/update` : '/diagrams/generate';
-        const payload: any = {
-            description: request.description,
-            syntax_type: request.syntax,
-            subtype: request.diagramType || 'auto',
-            model: request.model,
-            options: request.options
-        };
-        // Only include previousDiagramId if we have an ID but aren't updating
-        if (id && !updateCurrent) {
-            payload.previousDiagramId = id;
-        }
-        
-        const response = await api.post<DiagramResponse>(endpoint, payload);
-        return response.data;
+      // The API returns a direct array of models
+      const response = await api.get<ModelInfo[]>(`/${provider}/models`);
+      return response.data || [];
     } catch (error) {
-        handleError(error);
-        throw error;
+      console.error('Failed to fetch models:', error);
+      throw logError(error, 'Get Models');
     }
   },
 
-  // Get available syntax types and subtypes
-  getSyntaxTypes: async (): Promise<SyntaxTypesResponse> => {
+  async getSyntaxTypes(): Promise<SyntaxTypes> {
     try {
-      const response = await api.get('/diagrams/syntax-types');
+      const response = await api.get<SyntaxTypes>('/diagrams/syntax-types');
       return response.data;
     } catch (error) {
-      handleError(error);
-      // Return default types if API fails
+      throw logError(error, 'Get Syntax Types');
+    }
+  },
+
+  async validateDiagram(code: string, syntax: string): Promise<{ valid: boolean; errors: string[] }> {
+    try {
+      const response = await api.post('/diagrams/validate', { code, syntax });
+      return response.data;
+    } catch (error) {
+      throw logError(error, 'Validate Diagram');
+    }
+  },
+
+  async loadRagContext(directory: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const response = await api.post('/rag/load', { directory });
+      return response.data;
+    } catch (error) {
+      throw logError(error, 'Load RAG Context');
+    }
+  },
+
+  async modifyDiagram(requestData: DiagramModifyRequest): Promise<DiagramGenerationResponse> {
+    try {
+      const response = await api.post<DiagramGenerationResponse>('/diagrams/modify', requestData);
+      return response.data;
+    } catch (error) {
+      throw logError(error, 'Modify Diagram');
+    }
+  },
+  
+  async convertSyntax(code: string, fromSyntax: string, toSyntax: string): Promise<string> {
+    try {
+      const response = await api.post<{ code: string }>('/diagrams/convert', {
+        code,
+        from: fromSyntax,
+        to: toSyntax,
+      });
+      return response.data.code;
+    } catch (error) {
+      throw logError(error, 'Convert Syntax');
+    }
+  },
+
+  async requestChanges(diagramId: string, changes: string, model: string): Promise<RequestChangesResponse> {
+    try {
+      const response = await api.post<RequestChangesResponse>(`/diagrams/${diagramId}/changes`, {
+        changes,
+        model,
+      });
+      return response.data;
+    } catch (error) {
+      throw logError(error, 'Request Changes');
+    }
+  },
+
+  async getAgentIterations(diagramId: string): Promise<{ iterations: AgentIteration[]; current_iteration: number }> {
+    try {
+      const response = await api.get<AgentIterationResponse>(`/diagrams/diagram/${diagramId}/iterations`);
       return {
-        syntax: ['mermaid', 'plantuml'],
-        types: {
-          mermaid: ['flowchart', 'sequence', 'class', 'state', 'er', 'gantt', 'pie', 'mindmap'],
-          plantuml: ['sequence', 'class', 'activity', 'component', 'state', 'mindmap', 'gantt']
-        }
+        iterations: response.data.iterations,
+        current_iteration: response.data.current_iteration
       };
+    } catch (error) {
+      throw logError(error, 'Get Agent Iterations');
     }
   },
 
-  // Convert diagram between types
-  convertDiagram: async (code: string, fromType: string, toType: string) => {
+  async getDiagramById(diagramId: string): Promise<Diagram> {
     try {
-      const response = await api.post('/diagrams/convert', {
-        code,
-        from_type: fromType,
-        to_type: toType
-      });
+      const response = await api.get<Diagram>(`/diagrams/diagram/${diagramId}`);
       return response.data;
     } catch (error) {
-      handleError(error);
-      throw error;
+      throw logError(error, 'Get Diagram');
     }
   },
 
-  // Validate diagram syntax
-  validateDiagram: async (code: string, syntaxType: string) => {
+  async clearLogs(): Promise<void> {
     try {
-      const response = await api.post('/diagrams/validate', {
-        code,
-        syntax_type: syntaxType
-      });
-      return response.data;
+      await api.post('/logs/clear');
     } catch (error) {
-      handleError(error);
-      throw error;
+      throw logError(error, 'Clear Logs');
     }
   },
 
-  // Get diagram history
-  getDiagramHistory: async () => {
+  async getLogs(): Promise<LogEntry[]> {
     try {
-      const response = await api.get('/diagrams/history');
-      return response.data;
+      const response = await api.get<{ logs: LogEntry[] }>('/logs');
+      // Handle case where response.data.logs is undefined
+      if (!response.data || !Array.isArray(response.data.logs)) {
+        return [];  // Return empty array if no logs
+      }
+      return response.data.logs.map(log => ({
+        ...log,
+        type: log.type || 'system'  // Ensure type field is present
+      }));
     } catch (error) {
-      handleError(error);
-      throw error;
+      // Instead of throwing, return an empty array with the error logged
+      console.error('Failed to fetch logs:', error);
+      return [];
     }
   },
 
-  // Get logs
-  getLogs: async () => {
+  async getDiagramHistory(): Promise<DiagramHistoryItem[]> {
     try {
-      const response = await api.get('/logs');
+      const response = await api.get<DiagramHistoryItem[]>('/diagrams/history');
       return response.data;
     } catch (error) {
-      handleError(error);
-      return []; // Return empty array on error
+      throw logError(error, 'Get Diagram History');
     }
   },
 
-  // Get a specific diagram by ID
-  getDiagramById: async (id: string) => {
+  async deleteDiagram(diagramId: string): Promise<{ status: string; message: string }> {
     try {
-      const response = await api.get(`/diagrams/diagram/${id}`);
+      const response = await api.delete<{ status: string; message: string }>(`/diagrams/diagram/${diagramId}`);
       return response.data;
     } catch (error) {
-      handleError(error);
-      throw error;
+      throw logError(error, 'Delete Diagram');
     }
   },
 
-  // Delete a specific diagram
-  deleteDiagram: async (id: string) => {
+  async clearHistory(): Promise<{ status: string; message: string; state: { diagrams_deleted: number; success: boolean } }> {
     try {
-      const response = await api.delete(`/diagrams/diagram/${id}`);
+      const response = await api.delete<{ 
+        status: string; 
+        message: string;
+        state: {
+          diagrams_deleted: number;
+          success: boolean;
+          error?: string;
+        }
+      }>('/diagrams/clear');
       return response.data;
     } catch (error) {
-      handleError(error);
-      throw error;
+      throw logError(error, 'Clear Diagram History');
     }
   },
-
-  // Clear all diagram history
-  clearHistory: async () => {
-    try {
-      const response = await api.delete('/diagrams/clear');
-      return response.data;
-    } catch (error) {
-      handleError(error);
-      throw error;
-    }
-  },
-
-  // Clear logs
-  clearLogs: async () => {
-    try {
-      const response = await api.delete('/logs');
-      return response.data;
-    } catch (error) {
-      handleError(error);
-      throw error;
-    }
-  },
-
-  // Get agent iterations for a diagram
-  getAgentIterations: async (diagramId: string) => {
-    try {
-      const response = await api.get(`/diagrams/diagram/${diagramId}/iterations`);
-      return response.data;
-    } catch (error) {
-      handleError(error);
-      return 0; // Return 0 iterations on error
-    }
-  },
-
-  // Get available models
-  getAvailableModels: async (service: string = 'ollama') => {
-    try {
-      const response = await api.get(`/${service}/models`);
-      return response.data;
-    } catch (error) {
-      handleError(error);
-      // Return default model on error
-      return [{
-        id: 'llama2:latest',
-        name: 'llama2:latest',
-        provider: service,
-        size: 0,
-        digest: ''
-      }];
-    }
-  }
 };

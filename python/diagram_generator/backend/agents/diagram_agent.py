@@ -35,6 +35,9 @@ class DiagramAgentState(BaseModel):
     conversation_id: Optional[str] = Field(None, description="ID of the associated conversation")
     diagram_id: Optional[str] = Field(None, description="ID of the generated diagram")
     completed: bool = Field(False, description="Whether generation is complete")
+    requirements: Dict[str, Any] = Field(default_factory=dict, description="Requirements determined from prompt")
+    rag_provider: Optional[RAGProvider] = Field(None, description="RAG provider instance for context")
+    current_activity: str = Field("Initializing", description="Current activity for loading indicator")
 
 class DiagramAgentInput(BaseModel):
     """Input for the diagram agent."""
@@ -54,7 +57,7 @@ class DiagramAgentOutput(BaseModel):
     conversation_id: Optional[str] = Field(None, description="ID of the associated conversation")
 
 class DiagramAgent:
-    """Agent responsible for generating and refining diagram code."""
+    """Agent responsible for generating and refining diagram code using tool-based approach."""
 
     PROMPT_TEMPLATES = {
         "generate": """Task: Create a {diagram_type} diagram.
@@ -62,35 +65,20 @@ class DiagramAgent:
 Description: {description}
 
 {context_section}
+
+Example of a valid {diagram_type} diagram in {syntax_type}:
+{example_code}
+
 Rules:
 1. Only output raw {diagram_type} code
 2. No explanations, markdown formatting, code blocks, or backticks
 3. Keep diagram simple and clear
-4. Start directly with valid {diagram_type} syntax
-5. For Mermaid diagrams:
-   - Use proper node and edge syntax
-   - Apply styles with style statements
-   - First line must be the diagram type: [graph TD, sequenceDiagram, gantt, pie, classDiagram, stateDiagram, erDiagram, journey, mindmap, quadrantChart]
-6. For PlantUML diagrams:
-   - Must start with the correct tag:
-     * For mindmaps: @startmindmap
-     * For Gantt: @startgantt
-     * For class diagrams: @startuml with class syntax
-     * For sequence diagrams: @startuml with sequence syntax
-     * For state diagrams: @startuml with state syntax
-     * For activity diagrams: @startuml with activity syntax
-     * For component diagrams: @startuml with component syntax
-     * For deployment diagrams: @startuml with deployment syntax
-     * For object diagrams: @startuml with object syntax
-     * For use case diagrams: @startuml with usecase syntax
-     * For ER diagrams: @startuml with entity-relationship syntax
-     * For timing diagrams: @startuml with timing syntax
-   - Must end with @enduml
-   - Use skinparam for styling
+4. Follow the syntax structure shown in the example above
+{syntax_rules}
 
 IMPORTANT: Your entire output must be valid {diagram_type} syntax that can be rendered directly.
 """,
-        "fix": """Task: Fix errors in {diagram_type} diagram or apply styling changes.
+        "fix": """Task: Fix errors in {diagram_type} diagram.
 
 Validation Errors:
 {errors}
@@ -104,38 +92,8 @@ Rules:
 3. Make minimal changes to fix errors
 4. Ensure syntax is valid for rendering
 5. Preserve all existing elements and connections
-6. For Mermaid styling:
-   - Add style statements at the end
-   - Use proper style syntax for nodes and edges
-7. For PlantUML styling:
-   - Use skinparam commands at the start
-   - Use proper color/style attributes
 
 IMPORTANT: Return the complete diagram code with your changes."""
-    }
-
-    # System prompts for different tasks
-    SYSTEM_PROMPTS = {
-        "styling": """You are a specialized diagram styling agent. You modify diagram styling without changing the structure.
-When given a diagram and styling instructions:
-1. Always preserve the original diagram structure and content
-2. Only add or modify style statements
-3. Keep all nodes, connections, and text from the original diagram
-4. Apply styles precisely as requested
-5. Return the complete diagram with styling applied
-
-For Mermaid diagrams, use appropriate styling syntax:
-- Node styling: style NodeName fill:#colorcode,stroke:#colorcode,color:#textcolor
-- Edge styling: linkStyle 0 stroke:#colorcode,stroke-width:2px
-- Class styling: classDef className fill:#colorcode,stroke:#colorcode,color:#textcolor
-
-For PlantUML diagrams, use appropriate styling syntax:
-- Global styles: skinparam monochrome true
-- Component styles: skinparam component { BackgroundColor #colorcode, BorderColor #colorcode }
-- Arrow styles: skinparam arrow { Color #colorcode, Thickness 2 }
-
-Never generate a new diagram. Only style the existing one.
-"""
     }
 
     def __init__(
@@ -149,6 +107,124 @@ Never generate a new diagram. Only style the existing one.
         self.storage = storage or Storage()
         self.ollama = OllamaAPI(base_url=base_url)
         self.logger = logging.getLogger(__name__)
+        
+    def _determine_requirements(
+        self, 
+        description: str, 
+        diagram_type: DiagramType,
+        rag_directory: Optional[str] = None,
+        existing_diagram: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Analyze prompt and determine diagram requirements.
+        
+        Args:
+            description: User's diagram description
+            diagram_type: Type of diagram to generate (mermaid/plantuml)
+            rag_directory: Optional directory path for RAG context
+            existing_diagram: Optional existing diagram code to incorporate
+            
+        Returns:
+            Dictionary containing determined requirements and context
+        """
+        requirements = {
+            "description": description,
+            "diagram_type": diagram_type,
+            "existing_diagram": existing_diagram,
+            "rag_context": None
+        }
+        
+        # Load RAG context if directory provided
+        if rag_directory:
+            try:
+                rag_provider = RAGProvider(
+                    config=DiagramGenerationOptions().rag,
+                    ollama_base_url=self.ollama.base_url
+                )
+                if rag_provider.load_docs_from_directory(rag_directory):
+                    context = rag_provider.get_relevant_context(description)
+                    if context:
+                        requirements["rag_context"] = context
+                        requirements["rag_provider"] = rag_provider
+            except Exception as e:
+                self.logger.error(f"Error loading RAG context: {str(e)}")
+                
+        return requirements
+        
+    def _strip_comments(self, code: str) -> str:
+        """Remove comments, backticks and language specifiers from diagram code."""
+        # Clean markdown code blocks
+        if "```" in code:
+            code = re.sub(r"```(?:mermaid|plantuml)?\s*([\s\S]+?)```", r"\1", code)
+            
+        # Remove comments for Mermaid
+        lines = []
+        for line in code.split("\n"):
+            # Skip full-line comments
+            if line.strip().startswith("%"):
+                continue
+            # Remove inline comments
+            if "%" in line:
+                line = line[:line.index("%")]
+            lines.append(line)
+            
+        code = "\n".join(lines)
+        
+        # Remove any remaining backticks
+        code = code.replace("`", "").strip()
+        
+        return code
+        
+    def _validate_mermaid(self, code: str) -> ValidationResult:
+        """Validate Mermaid diagram syntax."""
+        return DiagramValidator.validate(code, DiagramType.MERMAID)
+        
+    def _validate_plantuml(self, code: str) -> ValidationResult:
+        """Validate PlantUML diagram syntax."""
+        return DiagramValidator.validate(code, DiagramType.PLANTUML)
+
+    def _get_syntax_rules(self, syntax_type: str) -> str:
+        """Get syntax-specific rules based on the diagram type."""
+        if syntax_type.lower() == 'mermaid':
+            return """5. Additional Rules for Mermaid:
+   - Use proper node and edge syntax
+   - Apply styles with style statements
+   - First line must match the diagram type from example"""
+        else:  # plantuml
+            return """5. Additional Rules for PlantUML:
+   - Must start and end with the correct tags as shown in example
+   - Use skinparam for styling
+   - Follow the specific syntax for the diagram type"""
+
+    def _detect_diagram_type(self, description: str) -> str:
+        """Detect specific diagram type from description."""
+        # Common diagram type keywords
+        type_patterns = {
+            'flowchart': ['flow', 'process', 'workflow', 'steps', 'flowchart'],
+            'sequence': ['sequence', 'interaction', 'message', 'communication', 'flow between'],
+            'class': ['class', 'object', 'inheritance', 'uml class', 'data model'],
+            'state': ['state', 'status', 'transition', 'machine'],
+            'er': ['entity', 'relationship', 'database', 'schema', 'data model'],
+            'mindmap': ['mindmap', 'mind map', 'brainstorm', 'concept map', 'thought process'],
+            'gantt': ['gantt', 'timeline', 'schedule', 'project plan', 'time'],
+            'activity': ['activity', 'process flow', 'workflow steps'],
+            'component': ['component', 'architecture', 'system', 'module'],
+            'usecase': ['use case', 'user interaction', 'actor', 'system interaction']
+        }
+        
+        description = description.lower()
+        
+        # Check for explicit type mentions first
+        for diagram_type, keywords in type_patterns.items():
+            if any(f"{keyword} diagram" in description for keyword in keywords):
+                return diagram_type
+                
+        # Then check for implicit type hints
+        for diagram_type, keywords in type_patterns.items():
+            if any(keyword in description for keyword in keywords):
+                return diagram_type
+                
+        # Default to flowchart if no specific type detected
+        return 'flowchart'
 
     async def _generate_with_llm(
         self,
@@ -158,10 +234,24 @@ Never generate a new diagram. Only style the existing one.
         agent_config: Optional[AgentConfig]
     ) -> Dict[str, str]:
         """Generate diagram using LLM."""
+        # Detect specific diagram type from description
+        specific_type = self._detect_diagram_type(description)
+        
+        # Get example code for the detected type
+        from .diagram_examples import DiagramTypeExamples
+        syntax_type = diagram_type.lower()  # mermaid or plantuml
+        example_code = DiagramTypeExamples.get_example(specific_type, syntax_type)
+        
+        # Get syntax-specific rules
+        syntax_rules = self._get_syntax_rules(syntax_type)
+
         prompt = self.PROMPT_TEMPLATES["generate"].format(
             description=description,
-            diagram_type=diagram_type,
-            context_section=context_section
+            diagram_type=specific_type,
+            syntax_type=syntax_type,
+            context_section=context_section,
+            example_code=example_code,
+            syntax_rules=syntax_rules
         )
 
         model = agent_config.model_name if agent_config and agent_config.enabled else self.default_model
@@ -215,6 +305,18 @@ Never generate a new diagram. Only style the existing one.
 
     def _extract_clean_diagram_code(self, raw_content: str) -> str:
         """Extract clean diagram code from LLM response."""
+        # Method 1: Extract content between backticks (```), prioritizing this approach
+        if "```" in raw_content:
+            try:
+                # Extract all code blocks, including those with language specifiers
+                code_blocks = re.findall(r"```(?:\w+)?\s*([\s\S]+?)```", raw_content)
+                if code_blocks:
+                    # Take the first code block that was found
+                    return code_blocks[0].strip()
+            except Exception as e:
+                log_error(f"Error extracting code block: {str(e)}")
+                
+        # Method 2: Check for diagram code without backticks
         def is_valid_diagram_starter(line: str) -> bool:
             """Check if a line is a valid diagram starter."""
             line = line.lower().strip()
@@ -231,30 +333,6 @@ Never generate a new diagram. Only style the existing one.
                 return True
             return False
 
-        def extract_from_code_block(block: str) -> str:
-            """Extract and validate diagram code from a code block."""
-            lines = block.strip().split('\n')
-            # Skip any explanatory text before the actual diagram code
-            for i, line in enumerate(lines):
-                if is_valid_diagram_starter(line):
-                    return '\n'.join(lines[i:])
-            return block
-
-        # Method 1: Handle code blocks first
-        if "```" in raw_content:
-            try:
-                # Extract all code blocks including with language specifiers
-                code_blocks = re.findall(r"```(?:mermaid|plantuml)?\s*([\s\S]+?)```", raw_content)
-                if code_blocks:
-                    # Process each code block and keep the first valid one
-                    for block in code_blocks:
-                        cleaned = extract_from_code_block(block.strip())
-                        if is_valid_diagram_starter(cleaned.split('\n')[0]):
-                            return cleaned
-            except Exception as e:
-                log_error(f"Error extracting code block: {str(e)}")
-
-        # Method 2: Look for diagram code without code blocks
         lines = raw_content.split('\n')
         start_idx = None
         end_idx = None
@@ -296,62 +374,6 @@ Never generate a new diagram. Only style the existing one.
             diagram_id=str(uuid.uuid4()),
             conversation_id=str(uuid.uuid4())
         )
-
-    async def _plan(self, state: DiagramAgentState, options: DiagramGenerationOptions) -> None:
-        """Plan the next action based on current state."""
-        # If we don't have diagram code yet, plan to generate it
-        if not state.code:
-            state.notes.append("Planning initial diagram generation")
-            return
-
-        # If we've reached max iterations or diagram is valid, plan to complete
-        if state.iterations >= options.agent.max_iterations:
-            state.notes.append(f"Reached maximum iterations ({options.agent.max_iterations})")
-            state.completed = True
-            return
-
-        if state.validation_result and state.validation_result.get("valid", False):
-            state.notes.append("Diagram validation successful")
-            state.completed = True
-            return
-
-        # Otherwise plan to fix errors
-        state.notes.append(f"Planning iteration {state.iterations + 1} to fix errors")
-
-    async def _execute(self, state: DiagramAgentState, options: DiagramGenerationOptions) -> None:
-        """Execute the current plan."""
-        # Generate new diagram if we don't have one yet
-        if not state.code:
-            try:
-                result = await self._generate_with_llm(
-                    state.description,
-                    state.diagram_type.value,
-                    state.context_section,
-                    options.agent if options and options.agent.enabled else None
-                )
-                state.code = result["content"]
-                state.notes.append("Generated initial diagram")
-            except Exception as e:
-                state.notes.append(f"Error generating diagram: {str(e)}")
-                state.errors.append(f"Generation failed: {str(e)}")
-                state.completed = True
-            return
-
-        # Otherwise, try to fix errors
-        if state.errors:
-            try:
-                state.code = await self._fix_diagram(
-                    state.code,
-                    state.diagram_type.value,
-                    state.errors,
-                    options.agent
-                )
-                state.notes.append(f"Applied fixes in iteration {state.iterations + 1}")
-                state.iterations += 1
-            except Exception as e:
-                state.notes.append(f"Error fixing diagram: {str(e)}")
-                state.errors.append(f"Fix attempt failed: {str(e)}")
-                state.completed = True
 
     def _validate(self, state: DiagramAgentState) -> None:
         """Validate the current diagram."""
@@ -448,19 +470,15 @@ Never generate a new diagram. Only style the existing one.
 
         self.logger.info(f"Generating {diagram_type} diagram for: {description}")
 
-        # Get RAG context if enabled
-        context_section = ""
-        if rag_provider and options.rag.enabled:
-            context = rag_provider.get_relevant_context(description)
-            if context:
-                context_section = f"Use this API context:\n{context}\n\n"
-
-        # Create agent input
+        # Extract RAG directory from options
+        rag_directory = options.rag.api_doc_dir if options.rag and options.rag.enabled else None
+            
+        # Create agent input and run
         input_data = DiagramAgentInput(
             description=description,
             diagram_type=diagram_type,
             options=options,
-            rag_context=context_section
+            rag_context=""  # We'll get context from _determine_requirements
         )
 
         # Run the agent
@@ -476,50 +494,92 @@ Never generate a new diagram. Only style the existing one.
         # Initialize agent state
         state = self._init_state(input_data)
 
-        # Track consecutive validation failures
-        consecutive_failures = 0
-        max_consecutive_failures = 3
+        # Extract RAG directory from options if present
+        rag_directory = options.rag.api_doc_dir if options.rag and options.rag.enabled else None
 
-        # Agent loop
-        while not state.completed:
-            # Plan what to do next
-            await self._plan(state, options)
+        # Step 1: Determine requirements
+        state.current_activity = "Analyzing Requirements"
+        requirements = self._determine_requirements(
+            state.description,
+            state.diagram_type,
+            rag_directory=rag_directory
+        )
+        state.requirements = requirements
+        state.rag_provider = requirements.get("rag_provider")
+        state.context_section = requirements.get("rag_context", "")
 
-            # If completed during planning, exit loop
-            if state.completed:
-                break
+        # Step 2: Generate initial diagram
+        state.current_activity = "Generating Diagram"
+        try:
+            result = await self._generate_with_llm(
+                state.description,
+                state.diagram_type.value,
+                state.context_section,
+                options.agent if options.agent.enabled else None
+            )
+            raw_code = result["content"]
 
-            # Execute the plan
-            await self._execute(state, options)
+            # Step 3: Strip comments
+            state.current_activity = "Processing Code"
+            state.code = self._strip_comments(raw_code)
 
-            # Validate the result
-            self._validate(state)
+            # Step 4: Validate
+            state.current_activity = "Validating Diagram"
+            if state.diagram_type == DiagramType.MERMAID:
+                validation_result = self._validate_mermaid(state.code)
+            else:
+                validation_result = self._validate_plantuml(state.code)
 
-            # Check validation result
-            if state.validation_result:
-                if state.validation_result.get("valid", False):
-                    # Success - diagram is valid
-                    state.notes.append("Generated valid diagram")
-                    state.completed = True
+            state.validation_result = validation_result.to_dict()
+            state.errors = validation_result.errors
+
+            # Track validation attempts
+            attempts = 0
+            while state.errors and attempts < options.agent.max_iterations:
+                state.current_activity = f"Fixing Issues (Attempt {attempts + 1})"
+                attempts += 1
+                state.iterations += 1
+
+                # Try to fix errors
+                state.code = await self._fix_diagram(
+                    state.code,
+                    state.diagram_type.value,
+                    state.errors,
+                    options.agent
+                )
+
+                # Validate again
+                state.current_activity = "Re-validating Diagram"
+                if state.diagram_type == DiagramType.MERMAID:
+                    validation_result = self._validate_mermaid(state.code)
                 else:
-                    # Track consecutive failures
-                    consecutive_failures += 1
-                    if consecutive_failures >= max_consecutive_failures:
-                        state.notes.append(f"Failed to generate valid diagram after {consecutive_failures} attempts")
-                        break
-                    elif state.iterations >= options.agent.max_iterations:
-                        state.notes.append(f"Reached maximum iterations ({options.agent.max_iterations})")
-                        break
-                    else:
-                        # Prepare for next iteration
-                        state.iterations += 1
-                        error_summary = ", ".join(state.errors[:2])  # First few errors
-                        state.notes.append(f"Attempt {state.iterations}: Fixing errors ({error_summary})")
+                    validation_result = self._validate_plantuml(state.code)
 
-        # Store results
+                state.validation_result = validation_result.to_dict()
+                state.errors = validation_result.errors
+
+                if not state.errors:
+                    state.notes.append("Successfully fixed diagram issues")
+                    break
+                else:
+                    error_summary = ", ".join(state.errors[:2])
+                    state.notes.append(f"Attempt {attempts}: Still fixing errors ({error_summary})")
+
+            # Handle max iterations reached
+            if state.errors and attempts >= options.agent.max_iterations:
+                state.notes.append(f"Failed to generate valid diagram after {attempts} attempts")
+                # We still return the code, but it will be shown in code editor view
+
+        except Exception as e:
+            state.notes.append(f"Error during generation: {str(e)}")
+            state.errors.append(str(e))
+            state.completed = True
+
+        # Store results and cleanup
+        state.current_activity = "Saving Results"
         self._store_results(state)
+        state.completed = True
 
-        # Return output
         return self._prepare_output(state)
 
     async def _fix_diagram(
@@ -530,8 +590,58 @@ Never generate a new diagram. Only style the existing one.
         config: Optional[AgentConfig] = None,
     ) -> str:
         """Fix diagram syntax errors."""
+        # Detect diagram type from code structure
+        from .diagram_examples import DiagramTypeExamples
+        
+        # Determine if it's mermaid or plantuml from the code
+        syntax_type = 'plantuml' if '@startuml' in code or '@startmindmap' in code or '@startgantt' in code else 'mermaid'
+        
+        # Detect specific diagram type by examining first line or structure
+        first_line = code.split('\n')[0].lower()
+        if syntax_type == 'mermaid':
+            if 'graph' in first_line or 'flowchart' in first_line:
+                specific_type = 'flowchart'
+            elif 'sequencediagram' in first_line:
+                specific_type = 'sequence'
+            elif 'classdiagram' in first_line:
+                specific_type = 'class'
+            elif 'statediagram' in first_line:
+                specific_type = 'state'
+            elif 'erdiagram' in first_line:
+                specific_type = 'er'
+            elif 'mindmap' in first_line:
+                specific_type = 'mindmap'
+            elif 'gantt' in first_line:
+                specific_type = 'gantt'
+            else:
+                specific_type = 'flowchart'  # default
+        else:  # plantuml
+            if '@startmindmap' in first_line:
+                specific_type = 'mindmap'
+            elif '@startgantt' in first_line:
+                specific_type = 'gantt'
+            elif 'class' in code.lower():
+                specific_type = 'class'
+            elif 'state' in code.lower():
+                specific_type = 'state'
+            elif 'actor' in code.lower() or 'usecase' in code.lower():
+                specific_type = 'usecase'
+            elif 'component' in code.lower():
+                specific_type = 'component'
+            elif 'entity' in code.lower():
+                specific_type = 'er'
+            elif 'participant' in code.lower() or '->' in code:
+                specific_type = 'sequence'
+            elif 'activity' in code.lower():
+                specific_type = 'activity'
+            else:
+                specific_type = 'sequence'  # default
+        
+        # Get example code for the detected type
+        example_code = DiagramTypeExamples.get_example(specific_type, syntax_type)
+        
         prompt = self.PROMPT_TEMPLATES["fix"].format(
-            diagram_type=diagram_type,
+            diagram_type=specific_type,
             code=code,
             errors="\n".join(errors)
         )
@@ -539,13 +649,19 @@ Never generate a new diagram. Only style the existing one.
         model = config.model_name if config and config.enabled else self.default_model
         temperature = config.temperature if config and config.enabled else 0.2
 
-        # Check if this is a styling request to use specialized system prompt
-        is_styling_request = any(styling_term in " ".join(errors).lower() for styling_term in 
-                               ["style", "color", "fill", "stroke", "theme", "styling", "appearance"])
+        # Add example code to system prompt
+        system_prompt = f"""Use this example as a reference for valid syntax:
 
-        # Use styling system prompt for color/styling requests
-        system = self.SYSTEM_PROMPTS["styling"] if is_styling_request else None
-        system = config.system_prompt if config and config.enabled and config.system_prompt else system
+{example_code}
+
+When fixing the diagram:
+1. Keep the same type of nodes, edges, and relationships as the original
+2. Ensure syntax matches the example above
+3. Maintain the same diagram elements but fix their syntax
+"""
+
+        # Override with config system prompt if provided
+        system = config.system_prompt if config and config.enabled and config.system_prompt else system_prompt
 
         try:
             result = await self.ollama.generate(
@@ -571,8 +687,9 @@ Never generate a new diagram. Only style the existing one.
                 log_error(error_msg)
                 raise Exception(error_msg)
 
-            log_llm("Fixed diagram successfully", {
-                "content_length": len(fixed_code)
+            log_llm("Applied fix to diagram", {
+                "content_length": len(fixed_code),
+                "diagram": fixed_code
             })
 
             return fixed_code
