@@ -83,6 +83,50 @@ def test_validate_mermaid_invalid():
         assert not result.valid
         assert result.errors
 
+def test_validate_mermaid_mindmap():
+    """Test validation of Mermaid mindmap diagrams."""
+    test_cases = [
+        # Valid mindmap with single root
+        ("""mindmap
+  root((My Project))
+    Features
+      Core
+      Advanced
+    Timeline
+      Phase 1
+      Phase 2""", True),
+
+        # Valid mindmap with explicit root syntax
+        ("""mindmap
+root((Project))
+  Features
+    Core
+  Timeline
+    Phase 1""", True),
+
+        # Invalid - multiple roots
+        ("""mindmap
+  root((Project 1))
+  Features
+  Timeline""", False),
+
+        # Invalid - no root node
+        ("""mindmap""", False),
+
+        # Invalid - improper indentation
+        ("""mindmap
+  root((Project))
+      Features
+    Core""", False),
+    ]
+
+    for diagram, should_be_valid in test_cases:
+        result = DiagramValidator.validate(diagram, "mermaid")
+        assert result.valid == should_be_valid, f"Failed validation for: {diagram}"
+        if not should_be_valid:
+            assert result.errors, "Invalid diagram should have error messages"
+            assert result.suggestions, "Invalid diagram should have suggestions"
+
 def test_validate_plantuml_valid():
     """Test validation of valid PlantUML diagrams."""
     valid_diagrams = [
@@ -301,3 +345,452 @@ def test_validate_with_string_type():
     result = DiagramValidator.validate(mermaid, "unknown")
     assert not result.valid
     assert "Invalid diagram type" in result.errors[0]
+
+def test_validate_mermaid_sequence():
+    """Test validation of Mermaid sequence diagrams."""
+    test_cases = [
+        # Valid sequence diagram
+        ("""sequenceDiagram
+    participant Alice
+    participant Bob
+    Alice->>Bob: Hello
+    Bob-->>Alice: Hi""", True),
+
+        # Missing participants
+        ("""sequenceDiagram
+    Alice->>Bob: Hello""", False),
+
+        # Invalid message syntax
+        ("""sequenceDiagram
+    participant Alice
+    participant Bob
+    Alice Bob Hello""", False)
+    ]
+
+    for diagram, should_be_valid in test_cases:
+        result = DiagramValidator.validate(diagram, "mermaid")
+        assert result.valid == should_be_valid, f"Failed validation for: {diagram}"
+        if not should_be_valid:
+            assert result.errors
+            assert result.suggestions
+
+def test_validate_mermaid_class():
+    """Test validation of Mermaid class diagrams."""
+    test_cases = [
+        # Valid class diagram
+        ("""classDiagram
+    class Animal {
+        +String name
+        +makeSound()
+    }
+    class Dog {
+        +bark()
+    }
+    Animal <|-- Dog""", True),
+
+        # Missing class declarations
+        ("""classDiagram
+    Animal <|-- Dog""", False),
+    ]
+
+    for diagram, should_be_valid in test_cases:
+        result = DiagramValidator.validate(diagram, "mermaid")
+        assert result.valid == should_be_valid, f"Failed validation for: {diagram}"
+        if not should_be_valid:
+            assert result.errors
+            assert result.suggestions
+
+def test_validate_mermaid_flowchart():
+    """Test validation of Mermaid flowcharts."""
+    test_cases = [
+        # Valid flowchart
+        ("""flowchart TD
+    A[Start] --> B[Process]
+    B --> C[End]""", True),
+
+        # No nodes
+        ("""flowchart TD
+    --> B --> C""", False),
+
+        # No connections
+        ("""flowchart TD
+    A[Start]
+    B[Process]""", False)
+    ]
+
+    for diagram, should_be_valid in test_cases:
+        result = DiagramValidator.validate(diagram, "mermaid")
+        assert result.valid == should_be_valid, f"Failed validation for: {diagram}"
+        if not should_be_valid:
+            assert result.errors
+            assert result.suggestions
+
+def test_validate_mermaid_state():
+    """Test validation of Mermaid state diagrams."""
+    test_cases = [
+        # Valid state diagram
+        ("""stateDiagram
+    [*] --> Idle
+    Idle --> Active
+    Active --> Idle""", True),
+
+        # No states/transitions
+        ("""stateDiagram""", False)
+    ]
+
+    for diagram, should_be_valid in test_cases:
+        result = DiagramValidator.validate(diagram, "mermaid")
+        assert result.valid == should_be_valid, f"Failed validation for: {diagram}"
+        if not should_be_valid:
+            assert result.errors
+            assert result.suggestions
+
+def test_validate_mermaid_er():
+    """Test validation of Mermaid ER diagrams."""
+    test_cases = [
+        # Valid ER diagram
+        ("""erDiagram
+    CUSTOMER {
+        string name
+        string email
+    }
+    ORDER {
+        int id
+    }
+    CUSTOMER ||--o{ ORDER : places""", True),
+
+        # Missing relationships
+        ("""erDiagram
+    CUSTOMER {
+        string name
+    }
+    ORDER {
+        int id
+    }""", False),
+
+        # Missing entities
+        ("""erDiagram
+    CUSTOMER ||--o{ ORDER : places""", False)
+    ]
+
+    for diagram, should_be_valid in test_cases:
+        result = DiagramValidator.validate(diagram, "mermaid")
+        assert result.valid == should_be_valid, f"Failed validation for: {diagram}"
+        if not should_be_valid:
+            assert result.errors
+            assert result.suggestions
+
+def test_validate_mermaid_gantt():
+    """Test validation of Mermaid Gantt charts."""
+    test_cases = [
+        # Valid Gantt chart
+        ("""gantt
+    dateFormat YYYY-MM-DD
+    section Tests
+    First task: 2024-01-01, 7d
+    Second task: 2024-01-08, 5d""", True),
+
+        # Missing date format
+        ("""gantt
+    section Tests
+    First task: 2024-01-01, 7d""", False),
+
+        # Missing tasks
+        ("""gantt
+    dateFormat YYYY-MM-DD
+    section Tests""", False)
+    ]
+
+    for diagram, should_be_valid in test_cases:
+        result = DiagramValidator.validate(diagram, "mermaid")
+        assert result.valid == should_be_valid, f"Failed validation for: {diagram}"
+        if not should_be_valid:
+            assert result.errors
+            assert result.suggestions
+
+def test_validate_plantuml_sequence():
+    """Test validation of PlantUML sequence diagrams."""
+    test_cases = [
+        # Valid sequence diagram
+        ("""@startuml
+participant User
+participant System
+User -> System: Request
+System --> User: Response
+@enduml""", True),
+
+        # Missing participants
+        ("""@startuml
+Alice -> Bob: Hello
+@enduml""", False),
+
+        # Invalid message syntax (missing colon)
+        ("""@startuml
+participant Alice
+participant Bob
+Alice -> Bob
+@enduml""", False)
+    ]
+
+    for diagram, should_be_valid in test_cases:
+        result = DiagramValidator.validate(diagram, "plantuml")
+        assert result.valid == should_be_valid, f"Failed validation for: {diagram}"
+        if not should_be_valid:
+            assert result.errors
+            assert result.suggestions
+
+def test_validate_plantuml_class():
+    """Test validation of PlantUML class diagrams."""
+    test_cases = [
+        # Valid class diagram
+        ("""@startuml
+class User {
+    +name: String
+    +email: String
+}
+class Account {
+    +balance: Number
+}
+User --> Account: has
+@enduml""", True),
+
+        # Missing class definitions
+        ("""@startuml
+User --> Account: has
+@enduml""", False)
+    ]
+
+    for diagram, should_be_valid in test_cases:
+        result = DiagramValidator.validate(diagram, "plantuml")
+        assert result.valid == should_be_valid, f"Failed validation for: {diagram}"
+        if not should_be_valid:
+            assert result.errors
+            assert result.suggestions
+
+def test_validate_plantuml_state():
+    """Test validation of PlantUML state diagrams."""
+    test_cases = [
+        # Valid state diagram
+        ("""@startuml
+[*] --> Idle
+state Idle
+state Active
+Idle -> Active: Start
+Active -> Idle: Stop
+@enduml""", True),
+
+        # Valid with implicit states
+        ("""@startuml
+[*] --> Idle
+Idle -> Active: Start
+Active -> Idle: Stop
+@enduml""", True),
+
+        # No states or transitions
+        ("""@startuml
+title State Machine
+@enduml""", False)
+    ]
+
+    for diagram, should_be_valid in test_cases:
+        result = DiagramValidator.validate(diagram, "plantuml")
+        assert result.valid == should_be_valid, f"Failed validation for: {diagram}"
+        if not should_be_valid:
+            assert result.errors
+            assert result.suggestions
+
+def test_validate_plantuml_activity():
+    """Test validation of PlantUML activity diagrams."""
+    test_cases = [
+        # Valid activity diagram
+        ("""@startuml
+start
+:Initialize;
+if (Valid?) then (yes)
+    :Process Data;
+else (no)
+    :Handle Error;
+endif
+stop
+@enduml""", True),
+
+        # Missing start
+        ("""@startuml
+:Initialize;
+:Process;
+stop
+@enduml""", False),
+
+        # Missing stop/end
+        ("""@startuml
+start
+:Initialize;
+:Process;
+@enduml""", False),
+
+        # No activities
+        ("""@startuml
+start
+stop
+@enduml""", False)
+    ]
+
+    for diagram, should_be_valid in test_cases:
+        result = DiagramValidator.validate(diagram, "plantuml")
+        assert result.valid == should_be_valid, f"Failed validation for: {diagram}"
+        if not should_be_valid:
+            assert result.errors
+            assert result.suggestions
+
+def test_validate_plantuml_component():
+    """Test validation of PlantUML component diagrams."""
+    test_cases = [
+        # Valid component diagram
+        ("""@startuml
+package "Frontend" {
+    [UserInterface]
+    [APIClient]
+}
+package "Backend" {
+    [APIServer]
+    [Database]
+}
+[UserInterface] --> [APIServer]
+@enduml""", True),
+
+        # No components
+        ("""@startuml
+title System Components
+@enduml""", False)
+    ]
+
+    for diagram, should_be_valid in test_cases:
+        result = DiagramValidator.validate(diagram, "plantuml")
+        assert result.valid == should_be_valid, f"Failed validation for: {diagram}"
+        if not should_be_valid:
+            assert result.errors
+            assert result.suggestions
+
+def test_validate_plantuml_usecase():
+    """Test validation of PlantUML use case diagrams."""
+    test_cases = [
+        # Valid use case diagram
+        ("""@startuml
+actor User
+usecase "Login" as UC1
+usecase "View Profile" as UC2
+User --> UC1
+User --> UC2
+@enduml""", True),
+
+        # Missing actors/use cases
+        ("""@startuml
+title Use Cases
+@enduml""", False)
+    ]
+
+    for diagram, should_be_valid in test_cases:
+        result = DiagramValidator.validate(diagram, "plantuml")
+        assert result.valid == should_be_valid, f"Failed validation for: {diagram}"
+        if not should_be_valid:
+            assert result.errors
+            assert result.suggestions
+
+def test_validate_plantuml_er():
+    """Test validation of PlantUML ER diagrams."""
+    test_cases = [
+        # Valid ER diagram
+        ("""@startuml
+entity User {
+    id: number
+    name: string
+}
+entity Order {
+    id: number
+    total: number
+}
+User ||--o{ Order
+@enduml""", True),
+
+        # Missing entities
+        ("""@startuml
+User ||--o{ Order
+@enduml""", False),
+
+        # Missing relationships
+        ("""@startuml
+entity User {
+    id: number
+}
+entity Order {
+    id: number
+}
+@enduml""", False)
+    ]
+
+    for diagram, should_be_valid in test_cases:
+        result = DiagramValidator.validate(diagram, "plantuml")
+        assert result.valid == should_be_valid, f"Failed validation for: {diagram}"
+        if not should_be_valid:
+            assert result.errors
+            assert result.suggestions
+
+def test_validate_plantuml_mindmap():
+    """Test validation of PlantUML mindmap diagrams."""
+    test_cases = [
+        # Valid mindmap
+        ("""@startmindmap
+* Project
+** Frontend
+*** React
+*** TypeScript
+** Backend
+*** Python
+*** FastAPI
+@endmindmap""", True),
+
+        # Missing nodes
+        ("""@startmindmap
+@endmindmap""", False),
+
+        # Invalid hierarchy (skipping level)
+        ("""@startmindmap
+* Root
+*** Invalid Level
+@endmindmap""", False)
+    ]
+
+    for diagram, should_be_valid in test_cases:
+        result = DiagramValidator.validate(diagram, "plantuml")
+        assert result.valid == should_be_valid, f"Failed validation for: {diagram}"
+        if not should_be_valid:
+            assert result.errors
+            assert result.suggestions
+
+def test_validate_plantuml_gantt():
+    """Test validation of PlantUML Gantt charts."""
+    test_cases = [
+        # Valid gantt chart
+        ("""@startgantt
+Project starts 2024-01-01
+[Task 1] lasts 10 days
+[Task 2] starts at [Task 1]'s end
+@endgantt""", True),
+
+        # Missing project start
+        ("""@startgantt
+[Task 1] lasts 10 days
+@endgantt""", False),
+
+        # Missing tasks
+        ("""@startgantt
+Project starts 2024-01-01
+@endgantt""", False)
+    ]
+
+    for diagram, should_be_valid in test_cases:
+        result = DiagramValidator.validate(diagram, "plantuml")
+        assert result.valid == should_be_valid, f"Failed validation for: {diagram}"
+        if not should_be_valid:
+            assert result.errors
+            assert result.suggestions

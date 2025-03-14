@@ -21,6 +21,8 @@ const App: React.FC = () => {
   const [agentIterations, setAgentIterations] = useState<number>(0);
   const [currentSyntax, setCurrentSyntax] = useState<string>('mermaid');
   const [currentType, setCurrentType] = useState<string>('auto');
+  const [ragEnabled, setRagEnabled] = useState<boolean>(false);
+  const [ragDirectory, setRagDirectory] = useState<string>('');
   const queryClient = new QueryClient();
   
   // Reference to the SideBar component to access its methods
@@ -45,16 +47,22 @@ const App: React.FC = () => {
     loadInitialContext();
   }, []);
 
-  const handleCreateDiagram = async (description: string, model: string, syntax: string = 'mermaid', diagramType?: string) => {
+  const handleCreateDiagram = async (
+    prompt: string, 
+    model: string, 
+    syntax_type: string = 'mermaid', 
+    subtype?: string,
+    options?: any
+  ) => {
     setDiagram({
       loading: true,
       error: undefined,
       code: undefined
     });
     
-    const effectiveDiagramType = diagramType === 'auto' ? undefined : diagramType;
-    setCurrentSyntax(syntax);
-    setCurrentType(effectiveDiagramType || 'auto');
+    const effectiveSubtype = subtype === 'auto' ? undefined : subtype;
+    setCurrentSyntax(syntax_type);
+    setCurrentType(effectiveSubtype || 'auto');
 
     try {
       // First switch to workspace screen - this allows the diagram component to be mounted
@@ -62,13 +70,11 @@ const App: React.FC = () => {
       setCurrentScreen('workspace');
       
       const response = await diagramService.generateDiagram({
-        description,
+        prompt, // The actual diagram description
         model,
-        syntax,
-        diagramType: effectiveDiagramType,
-        options: {
-          agent: { enabled: true }
-        }
+        syntax_type,
+        subtype: effectiveSubtype,
+        options: options || { agent: { enabled: true } }
       });
 
       // Now update the diagram data after the component is mounted
@@ -247,12 +253,24 @@ const App: React.FC = () => {
   };
 
   const handleStartDiagramGeneration = (config: any) => {
+    // Track RAG settings
+    setRagEnabled(!!config.options?.rag?.enabled);
+    if (config.options?.rag?.enabled) {
+      setRagDirectory(config.options.rag.api_doc_dir || '');
+    }
+    
+    // Adapt the configuration to match the expected backend format
     handleCreateDiagram(
-      config.description,
+      config.prompt,
       config.model,
-      config.syntax,
-      config.diagramType
+      config.syntax_type,
+      config.subtype,
+      config.options
     );
+  };
+
+  const handleRagDirectoryChange = (directory: string) => {
+    setRagDirectory(directory);
   };
 
   return (
@@ -284,6 +302,9 @@ const App: React.FC = () => {
                 onCodeChange={(code) => setDiagram(prev => ({ ...prev, code }))}
                 syntax={currentSyntax}
                 diagramType={currentType}
+                ragEnabled={ragEnabled}
+                ragDirectory={ragDirectory}
+                onRagDirectoryChange={handleRagDirectoryChange}
               />
             )}
             

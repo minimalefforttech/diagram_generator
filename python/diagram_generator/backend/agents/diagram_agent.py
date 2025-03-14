@@ -70,30 +70,35 @@ Example of a valid {diagram_type} diagram in {syntax_type}:
 {example_code}
 
 Rules:
-1. Only output raw {diagram_type} code
-2. No explanations, markdown formatting, code blocks, or backticks
-3. Keep diagram simple and clear
-4. Follow the syntax structure shown in the example above
+1. Output ONLY the diagram code exactly as shown in the example
+2. Keep the same diagram type as the example ({diagram_type})
+3. Preserve indentation and structure exactly
+4. Do not convert to a different diagram type
+5. No explanations, markdown formatting, or backticks
 {syntax_rules}
 
-IMPORTANT: Your entire output must be valid {diagram_type} syntax that can be rendered directly.
+CRITICAL: Your response must be ONLY valid {diagram_type} code in the exact format shown above.
+DO NOT convert mindmap to flowchart or change the diagram type in any way.
 """,
-        "fix": """Task: Fix errors in {diagram_type} diagram.
+        "fix": """Task: Fix errors in {diagram_type} diagram while preserving exact type and structure.
 
-Validation Errors:
-{errors}
-
-Current Code:
+Current Code to Fix:
 {code}
 
-Rules:
-1. Only output the fixed {diagram_type} code
-2. No explanations or comments
-3. Make minimal changes to fix errors
-4. Ensure syntax is valid for rendering
-5. Preserve all existing elements and connections
+Validation Errors to Address:
+{errors}
 
-IMPORTANT: Return the complete diagram code with your changes."""
+Rules:
+1. Keep EXACTLY the same diagram type ({diagram_type})
+2. Preserve indentation and structure exactly
+3. Only fix the specific validation errors
+4. Do not convert or modify the diagram type
+5. Keep all existing elements and connections
+6. No explanations or comments in the output
+
+CRITICAL: Your response must be ONLY the fixed {diagram_type} code.
+DO NOT modify the diagram type or convert to a different format.
+Preserve the exact structure while only fixing the validation errors."""
     }
 
     def __init__(
@@ -151,28 +156,42 @@ IMPORTANT: Return the complete diagram code with your changes."""
         return requirements
         
     def _strip_comments(self, code: str) -> str:
-        """Remove comments, backticks and language specifiers from diagram code."""
-        # Clean markdown code blocks
+        """Remove comments and markdown formatting without affecting diagram structure."""
+        # Remove markdown code block markers if present, preserving content structure
         if "```" in code:
-            code = re.sub(r"```(?:mermaid|plantuml)?\s*([\s\S]+?)```", r"\1", code)
+            lines = []
+            in_block = False
+            for line in code.split("\n"):
+                if line.strip().startswith("```"):
+                    in_block = not in_block
+                    continue
+                if in_block:
+                    lines.append(line)  # Keep the line exactly as is inside code block
+            if lines:
+                code = "\n".join(lines)
             
-        # Remove comments for Mermaid
-        lines = []
+        # Process remaining lines for comments while preserving structure
+        processed_lines = []
         for line in code.split("\n"):
-            # Skip full-line comments
+            # Skip full-line comments for Mermaid
             if line.strip().startswith("%"):
                 continue
-            # Remove inline comments
+                
+            # Remove inline comments without affecting indentation
             if "%" in line:
                 line = line[:line.index("%")]
-            lines.append(line)
+                
+            # Keep the line, preserving its exact indentation
+            processed_lines.append(line.rstrip())  # Only remove trailing whitespace
             
-        code = "\n".join(lines)
+        # Join lines back together preserving exact structure
+        code = "\n".join(processed_lines)
         
-        # Remove any remaining backticks
-        code = code.replace("`", "").strip()
+        # Remove any remaining backticks without affecting structure
+        code = code.replace("`", "")
         
-        return code
+        # Remove leading/trailing blank lines but preserve internal whitespace
+        return code.strip("\n")
         
     def _validate_mermaid(self, code: str) -> ValidationResult:
         """Validate Mermaid diagram syntax."""
@@ -308,11 +327,30 @@ IMPORTANT: Return the complete diagram code with your changes."""
         # Method 1: Extract content between backticks (```), prioritizing this approach
         if "```" in raw_content:
             try:
-                # Extract all code blocks, including those with language specifiers
-                code_blocks = re.findall(r"```(?:\w+)?\s*([\s\S]+?)```", raw_content)
+                # Extract all code blocks, preserving exact indentation and diagram type
+                code_blocks = []
+                lines = raw_content.split('\n')
+                in_block = False
+                current_block = []
+                
+                for line in lines:
+                    if line.startswith("```"):
+                        if in_block:
+                            # End of block
+                            code_blocks.append('\n'.join(current_block))
+                            current_block = []
+                            in_block = False
+                        else:
+                            # Start of block - skip the ``` line itself
+                            in_block = True
+                    elif in_block:
+                        # Inside a block - keep the line exactly as is
+                        current_block.append(line)
+                        
                 if code_blocks:
                     # Take the first code block that was found
-                    return code_blocks[0].strip()
+                    # Don't strip() to preserve exact indentation
+                    return code_blocks[0]
             except Exception as e:
                 log_error(f"Error extracting code block: {str(e)}")
                 
@@ -463,7 +501,7 @@ IMPORTANT: Return the complete diagram code with your changes."""
         diagram_type: str = "mermaid",
         options: DiagramGenerationOptions = None,
         rag_provider: Optional[RAGProvider] = None,
-    ) -> Tuple[str, List[str]]:
+    ) -> DiagramAgentOutput:
         """Generate a diagram with validation and fixing."""
         if not options:
             options = DiagramGenerationOptions()
@@ -484,7 +522,7 @@ IMPORTANT: Return the complete diagram code with your changes."""
         # Run the agent
         output = await self.run_agent(input_data)
 
-        return output.code, output.notes
+        return output
 
     async def run_agent(self, input_data: DiagramAgentInput) -> DiagramAgentOutput:
         """Run the diagram agent to generate and validate a diagram."""
@@ -521,7 +559,7 @@ IMPORTANT: Return the complete diagram code with your changes."""
 
             # Step 3: Strip comments
             state.current_activity = "Processing Code"
-            state.code = self._strip_comments(raw_code)
+            state.code = self._strip_comments(raw_code).strip("\n")
 
             # Step 4: Validate
             state.current_activity = "Validating Diagram"
@@ -547,6 +585,7 @@ IMPORTANT: Return the complete diagram code with your changes."""
                     state.errors,
                     options.agent
                 )
+                state.code = self._strip_comments(state.code).strip("\n")
 
                 # Validate again
                 state.current_activity = "Re-validating Diagram"
@@ -650,14 +689,22 @@ IMPORTANT: Return the complete diagram code with your changes."""
         temperature = config.temperature if config and config.enabled else 0.2
 
         # Add example code to system prompt
-        system_prompt = f"""Use this example as a reference for valid syntax:
+        system_prompt = f"""Reference Example ({specific_type} diagram):
 
 {example_code}
 
-When fixing the diagram:
-1. Keep the same type of nodes, edges, and relationships as the original
-2. Ensure syntax matches the example above
-3. Maintain the same diagram elements but fix their syntax
+CRITICAL RULES:
+1. Keep EXACTLY the same diagram type ({specific_type})
+2. Preserve the exact indentation and structure as in the original code
+3. Only fix the syntax errors identified in validation
+4. Never convert between different diagram types (e.g. mindmap to flowchart)
+5. Keep the same nodes and relationships, just fix their syntax
+
+Your output must match:
+- Same diagram type as original ({specific_type})
+- Same indentation style
+- Same structure and organization
+- Only syntax errors fixed
 """
 
         # Override with config system prompt if provided

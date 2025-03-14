@@ -29,6 +29,9 @@ export interface LayoutProps {
   onCodeChange: (code: string) => void;
   syntax: string; // Added prop
   diagramType: string; // Added prop
+  ragEnabled?: boolean;
+  ragDirectory?: string;
+  onRagDirectoryChange?: (directory: string) => void;
 }
 
 const Layout: React.FC<LayoutProps> = ({
@@ -43,7 +46,10 @@ const Layout: React.FC<LayoutProps> = ({
   onTypeChange,
   onCodeChange,
   syntax,
-  diagramType
+  diagramType,
+  ragEnabled = false,
+  ragDirectory = '',
+  onRagDirectoryChange
 }) => {
   const { preferences } = useUIPreferences();
   const [showCodeEditor, setShowCodeEditor] = useState<boolean>(false);
@@ -91,14 +97,6 @@ const Layout: React.FC<LayoutProps> = ({
         
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <ThemeToggle />
-          <Button 
-            variant="outlined" 
-            color="error" 
-            startIcon={<DeleteIcon />}
-            onClick={onClearLogs}
-          >
-            Clear Logs
-          </Button>
           
           <Button 
             variant="contained" 
@@ -166,6 +164,8 @@ const Layout: React.FC<LayoutProps> = ({
               onRequestChanges={onRequestChanges}
               onSyntaxChange={onSyntaxChange}
               onTypeChange={onTypeChange}
+              onRagDirectoryChange={onRagDirectoryChange}
+              ragEnabled={ragEnabled}
             />
           </Box>
         </Box>

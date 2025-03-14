@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple, Any
@@ -51,7 +52,7 @@ class StorageError(Exception):
 
 class StorageConfig(BaseModel):
     """Configuration for storage layer."""
-    data_dir: str = "data"
+    data_dir: str = os.path.expanduser("~/diagram_generator")
     diagrams_dir: str = "diagrams"
     conversations_dir: str = "conversations"
     logs_dir: str = "logs"

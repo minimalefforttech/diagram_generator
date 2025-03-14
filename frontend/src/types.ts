@@ -24,7 +24,8 @@ export interface DiagramGenerationOptions {
 }
 
 export interface DiagramRequest {
-  description: string;
+  prompt: string;
+  description?: string;
   model?: string;
   syntax?: string;
   diagramType?: string;
@@ -35,6 +36,8 @@ export interface DiagramResponse {
   id?: string;
   code: string;
   type?: string;
+  description?: string;
+  prompt: string;
   notes?: string[];
 }
 
@@ -43,15 +46,6 @@ export interface SyntaxTypesResponse {
   types: {
     [key: string]: string[];
   };
-}
-
-export interface DiagramHistoryItem {
-  id: string;
-  createdAt: string;
-  description: string;
-  syntax: string;
-  type: string;
-  iterations?: number;
 }
 
 export interface DiagramApiError {

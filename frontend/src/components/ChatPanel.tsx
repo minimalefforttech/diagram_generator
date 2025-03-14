@@ -16,7 +16,6 @@ import {
   useTheme,
 } from '@mui/material';
 import ModelSelector from './ModelSelector';
-import DiagramTypeSelector from './DiagramTypeSelector';
 import SendIcon from '@mui/icons-material/Send';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
@@ -35,6 +34,7 @@ interface ChatPanelProps {
   onSyntaxChange?: (syntax: string) => void;
   onTypeChange?: (type: string) => void;
   onRagDirectoryChange?: (directory: string) => void;
+  ragEnabled?: boolean; // Add this prop to know if RAG is enabled
 }
 
 const ChatPanel: React.FC<ChatPanelProps> = ({
@@ -42,7 +42,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   onRequestChanges,
   onSyntaxChange,
   onTypeChange,
-  onRagDirectoryChange
+  onRagDirectoryChange,
+  ragEnabled = false // Default to false if not provided
 }) => {
   const theme = useTheme();
   const [message, setMessage] = useState('');
@@ -286,36 +287,32 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
           position: 'relative',
           zIndex: 1
         }}>
-          <DiagramTypeSelector
-            currentSyntax={currentSyntax}
-            currentType={currentType}
-            onSyntaxChange={handleSyntaxChange}
-            onTypeChange={handleTypeChange}
-          />
           <ModelSelector
             selectedModel={selectedModel}
             onModelChange={handleModelChange}
           />
-          <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-            <TextField
-              fullWidth
-              label="RAG Directory"
-              value={ragDirectory}
-              onChange={(e) => setRagDirectory(e.target.value)}
-              size="small"
-              helperText="Path to directory containing code/documentation"
-            />
-            <Button
-              variant="contained"
-              size="medium"
-              startIcon={<FolderOpenIcon />}
-              onClick={handleLoadRag}
-              disabled={!ragDirectory}
-              sx={{ mt: '3px' }}
-            >
-              Load
-            </Button>
-          </Box>
+          {ragEnabled && (
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+              <TextField
+                fullWidth
+                label="Reference Directory"
+                value={ragDirectory}
+                onChange={(e) => setRagDirectory(e.target.value)}
+                size="small"
+                helperText="Path to directory containing code/documentation"
+              />
+              <Button
+                variant="contained"
+                size="medium"
+                startIcon={<FolderOpenIcon />}
+                onClick={handleLoadRag}
+                disabled={!ragDirectory}
+                sx={{ mt: '3px' }}
+              >
+                Load
+              </Button>
+            </Box>
+          )}
         </Box>
       </Collapse>
 

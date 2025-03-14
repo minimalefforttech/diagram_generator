@@ -23,7 +23,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import { diagramService } from '../services/api';
-import { DiagramHistoryItem } from '../types';
+import { DiagramHistoryItem } from '../types/generation';
 
 interface DiagramHistoryProps {
   onSelectDiagram: (diagramId: string) => void;
@@ -221,26 +221,32 @@ const DiagramHistory = forwardRef<DiagramHistoryRefHandle, DiagramHistoryProps>(
                   </Box>
                 }
               >
-                <ListItemButton
-                  selected={item.id === currentDiagramId}
-                  onClick={() => onSelectDiagram(item.id)}
+                <Tooltip 
+                  title={item.prompt}
+                  placement="left"
+                  enterDelay={500}
                 >
-                  <ListItemText 
-                    primary={item.description}
-                    secondary={
-                      <Box sx={{ display: 'flex', gap: 1 }}>
-                        <Typography variant="caption" color="primary">
-                          {item.syntax}
-                        </Typography>
-                        {item.iterations && (
-                          <Typography variant="caption" color="text.secondary">
-                            Iterations: {item.iterations}
+                  <ListItemButton
+                    selected={item.id === currentDiagramId}
+                    onClick={() => onSelectDiagram(item.id)}
+                  >
+                    <ListItemText 
+                      primary={item.description || item.prompt}
+                      secondary={
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                          <Typography variant="caption" color="primary">
+                            {item.syntax}
                           </Typography>
-                        )}
-                      </Box>
-                    }
-                  />
-                </ListItemButton>
+                          {item.iterations && (
+                            <Typography variant="caption" color="text.secondary">
+                              Iterations: {item.iterations}
+                            </Typography>
+                          )}
+                        </Box>
+                      }
+                    />
+                  </ListItemButton>
+                </Tooltip>
               </ListItem>
             ))}
           </List>

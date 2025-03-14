@@ -1,9 +1,10 @@
 """Core diagram generation and validation logic."""
 
 import os
+import uuid
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from diagram_generator.backend.agents import DiagramAgent
+from diagram_generator.backend.agents import DiagramAgent, DiagramAgentOutput
 from diagram_generator.backend.models.configs import DiagramGenerationOptions, DiagramRAGConfig
 from diagram_generator.backend.services.ollama import OllamaService
 from diagram_generator.backend.utils.rag import RAGProvider
@@ -54,11 +55,11 @@ Source diagram:
     async def generate_diagram(
         self,
         description: str,
-        diagram_type: str = "mermaid",
+        diagram_type: str = "mermaid", 
         options: Optional[Union[Dict, DiagramGenerationOptions]] = None
-    ) -> Tuple[str, List[str]]:
+    ) -> DiagramAgentOutput:
         """Generate a diagram from a description."""
-        # Convert dict options to DiagramGenerationOptions if needed
+        # Convert dict options to DiagramGenerationOptions
         generation_options = self._prepare_options(options)
         
         # Extract model from options if provided
@@ -75,7 +76,7 @@ Source diagram:
                 self._setup_rag_provider(generation_options.rag)
                 
             # Generate diagram with agent
-            code, notes = await self.diagram_agent.generate_diagram(
+            return await self.diagram_agent.generate_diagram(
                 description=description,
                 diagram_type=diagram_type,
                 options=generation_options,
@@ -111,21 +112,32 @@ Source diagram:
                 except IndexError:
                     notes.append("Failed to extract PlantUML diagram code from markdown")
 
-        # Clean and validate the generated code for specific diagram types
-        if diagram_type.lower() == "mermaid":
-            code = DiagramValidator._clean_mermaid_code(code)
-        elif diagram_type.lower() == "plantuml":
-            code = DiagramValidator._clean_plantuml_code(code)
+            # Clean and validate the generated code for specific diagram types
+            if diagram_type.lower() == "mermaid":
+                code = DiagramValidator._clean_mermaid_code(code)
+            elif diagram_type.lower() == "plantuml":
+                code = DiagramValidator._clean_plantuml_code(code)
             
-        try:
-            # Validate the generated diagram
-            validation = await self.validate_diagram(code, diagram_type)
-            if isinstance(validation, dict) and not validation.get("valid", False):
-                notes.extend(validation.get("errors", []))
-        except Exception as e:
-            notes.append(f"Validation warning: {str(e)}")
-        
-        return code, notes
+            try:
+                # Validate the generated diagram
+                validation = await self.validate_diagram(code, diagram_type)
+                valid = validation.get("valid", False) if isinstance(validation, dict) else False
+                if not valid:
+                    notes.extend(validation.get("errors", []) if isinstance(validation, dict) else [])
+            except Exception as e:
+                notes.append(f"Validation warning: {str(e)}")
+                valid = False
+
+            # Create DiagramAgentOutput for legacy path
+            return DiagramAgentOutput(
+                code=code,
+                diagram_type=diagram_type,
+                notes=notes,
+                valid=valid,
+                iterations=1,
+                diagram_id=str(uuid.uuid4()),
+                conversation_id=str(uuid.uuid4())
+            )
 
     async def validate_diagram(
         self,

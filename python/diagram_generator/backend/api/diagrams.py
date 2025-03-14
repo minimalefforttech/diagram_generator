@@ -43,7 +43,8 @@ class ContinueConversationRequest(BaseModel):
 class DiagramHistoryItem(BaseModel):
     """Model for diagram history item."""
     id: str
-    description: str
+    description: Optional[str] = None  # Optional user-provided description
+    prompt: str  # Original prompt used to generate diagram
     syntax: str
     createdAt: str
     iterations: Optional[int] = None
@@ -54,7 +55,8 @@ class DiagramResponse(BaseModel):
     code: str
     type: str
     subtype: Optional[str] = None
-    description: str
+    description: Optional[str] = None  # Optional user-provided description
+    prompt: str  # Original prompt used to generate diagram
     createdAt: str
     metadata: Optional[Dict[str, Any]] = None
     notes: Optional[List[str]] = None
@@ -63,7 +65,8 @@ router = APIRouter(prefix="/diagrams", tags=["diagrams"])
 
 class GenerateDiagramRequest(BaseModel):
     """Request model for generating a diagram."""
-    description: str
+    description: Optional[str] = None  # Optional user-provided description
+    prompt: str  # The diagram prompt/description
     syntax_type: Optional[str] = "mermaid"  # High level syntax type (mermaid, plantuml)
     subtype: Optional[str] = "auto"  # Specific diagram type (flowchart, sequence, etc)
     model: Optional[str] = None
@@ -113,51 +116,55 @@ async def generate_diagram(request: GenerateDiagramRequest) -> Dict:
         # Log the generation request
         log_llm("Generating diagram", {
             "description": request.description,
+            "prompt": request.prompt,
             "type": diagram_type.value,
             "subtype": diagram_subtype.value,
             "model": request.model or ollama_service.model,
             "options": generation_options
         })
 
-        # Add subtype to description if not auto
-        description = request.description
+        # Add subtype to prompt if not auto
+        prompt = request.prompt
         if diagram_subtype != DiagramSubType.AUTO:
-            description = f"Create a {diagram_subtype.value} diagram: {description}"
+            prompt = f"Create a {diagram_subtype.value} diagram: {prompt}"
 
-        # Generate the diagram
-        code, notes = await diagram_generator.generate_diagram(
-            description=description,
+        # Generate the diagram and get agent output
+        result = await diagram_generator.generate_diagram(
+            description=prompt,
             diagram_type=diagram_type.value,
             options=generation_options
         )
-        
-        # Clean up the diagram code
-        cleaned_code = code.strip()
-        
-        # Extract code from markdown blocks if present
-        if "```" + diagram_type.value in cleaned_code:
-            try:
-                cleaned_code = cleaned_code.split("```" + diagram_type.value)[1].split("```")[0].strip()
-            except IndexError:
-                pass
 
-        # Final cleaning pass using the appropriate validator
-        if diagram_type == DiagramType.MERMAID:
-            cleaned_code = DiagramValidator._clean_mermaid_code(cleaned_code)
-        elif diagram_type == DiagramType.PLANTUML:
-            cleaned_code = DiagramValidator._clean_plantuml_code(cleaned_code)
-            
-        # Log successful generation
-        log_llm("Generation finished", {
-            "code": cleaned_code,
-            "notes": notes
-        })
-            
+        # Log success/failure
+        if result.code and result.valid:
+            log_llm("Generation successful", {
+                "diagram_type": diagram_type.value,
+                "code": result.code,
+                "notes": result.notes,
+                "iterations": result.iterations,
+                "diagram_id": result.diagram_id,
+                "conversation_id": result.conversation_id
+            })
+        else:
+            log_error("Failed to generate valid diagram", {
+                "diagram_type": diagram_type.value,
+                "code": result.code,
+                "notes": result.notes,
+                "iterations": result.iterations,
+                "valid": result.valid
+            })
+          
         return {
-            "code": cleaned_code,
+            "code": result.code,
             "type": diagram_type.value,
             "subtype": diagram_subtype.value,
-            "notes": [note for note in notes if note != "Failed to parse JSON response"]
+            "description": request.description,
+            "prompt": request.prompt,
+            "notes": result.notes,
+            "iterations": result.iterations,
+            "valid": result.valid,
+            "diagram_id": result.diagram_id,
+            "conversation_id": result.conversation_id
         }
 
     except Exception as e:
@@ -165,6 +172,7 @@ async def generate_diagram(request: GenerateDiagramRequest) -> Dict:
         log_error(error_msg, {
             "error": str(e),
             "description": request.description,
+            "prompt": request.prompt,
             "diagram_type": request.syntax_type,
             "options": generation_options
         })
@@ -211,9 +219,15 @@ async def get_diagram_history() -> List[DiagramHistoryItem]:
             # Get iterations from metadata if available
             iterations = diagram.metadata.get("iterations", 0) if diagram.metadata else 0
             
+            # Get description and prompt from metadata or fallback to description field
+            metadata = diagram.metadata or {}
+            description = metadata.get("description")
+            prompt = metadata.get("prompt", diagram.description)
+            
             history_items.append(DiagramHistoryItem(
                 id=diagram.id,
-                description=diagram.description[:100] + ("..." if len(diagram.description) > 100 else ""),
+                description=description,
+                prompt=prompt[:100] + ("..." if len(prompt) > 100 else ""),
                 syntax=diagram.diagram_type,
                 createdAt=diagram.created_at.isoformat(),
                 iterations=iterations
@@ -292,38 +306,33 @@ async def update_diagram(
             }
 
         # Generate the updated diagram
-        code, notes = await diagram_generator.generate_diagram(
-            description=request.description,
+        result = await diagram_generator.generate_diagram(
+            description=request.prompt,
             diagram_type=diagram_type.value,
             options=generation_options
         )
         
-        # Clean up the code
-        cleaned_code = code.strip()
-        if "```" + diagram_type.value in cleaned_code:
-            try:
-                cleaned_code = cleaned_code.split("```" + diagram_type.value)[1].split("```")[0].strip()
-            except IndexError:
-                pass
-
-        if diagram_type == DiagramType.MERMAID:
-            cleaned_code = DiagramValidator._clean_mermaid_code(cleaned_code)
-        elif diagram_type == DiagramType.PLANTUML:
-            cleaned_code = DiagramValidator._clean_plantuml_code(cleaned_code)
-
-        # Update the diagram and save it back
-        diagram.code = cleaned_code
-        diagram.description = request.description
+        # Update the diagram and save it back with metadata
+        diagram.code = result.code
+        diagram.description = request.prompt
+        diagram.metadata = {
+            **(diagram.metadata or {}),
+            "description": request.description,
+            "prompt": request.prompt,
+            "iterations": result.iterations,
+            "valid": result.valid
+        }
         storage.save_diagram(diagram)
 
         return DiagramResponse(
             id=diagram.id,
-            code=cleaned_code,
+            code=result.code,
             type=diagram_type.value,
             description=request.description,
+            prompt=request.prompt,
             createdAt=diagram.created_at.isoformat(),
             metadata=diagram.metadata,
-            notes=notes
+            notes=result.notes
         )
 
     except HTTPException:
@@ -349,14 +358,17 @@ async def get_diagram_by_id(diagram_id: str) -> DiagramResponse:
                 detail=f"Diagram with ID {diagram_id} not found"
             )
             
-        # Get iterations from metadata if available
+        # Get metadata
         metadata = diagram.metadata or {}
+        description = metadata.get("description")
+        prompt = metadata.get("prompt", diagram.description)
         
         return DiagramResponse(
             id=diagram.id,
             code=diagram.code,
             type=diagram.diagram_type,
-            description=diagram.description,
+            description=description,
+            prompt=prompt,
             createdAt=diagram.created_at.isoformat(),
             metadata=metadata,
             notes=[]  # Could populate from conversation records if needed

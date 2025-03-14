@@ -33,10 +33,11 @@ declare module 'react' {
 // Component Props
 interface ConfigurationScreenProps {
   onStartDiagramGeneration: (config: {
-    description: string;
+    prompt: string;
+    description?: string;
     model: string;
-    syntax: string;
-    diagramType?: string;
+    syntax_type: string;
+    subtype?: string;
     options?: {
       rag?: {
         enabled: boolean;
@@ -65,6 +66,7 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
   onSyntaxChange,
   onTypeChange
 }) => {
+  const [prompt, setPrompt] = useState('');
   const [description, setDescription] = useState('');
   const [selectedModel, setSelectedModel] = useState('');
   const [syntax, setSyntax] = useState('mermaid');
@@ -171,19 +173,20 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
       setError('Please select a model');
       return;
     }
-    if (!description.trim()) {
-      setError('Please enter a description');
+    if (!prompt.trim()) {
+      setError('Please enter a prompt');
       return;
     }
     if (ragEnabled && !ragDirectory.trim()) {
-      setError('Please select a RAG directory');
+      setError('Please select a references directory');
       return;
     }
     onStartDiagramGeneration({
-      description,
+      prompt: prompt.trim(), // The actual diagram description
+      description: description.trim() || undefined, // Optional title
       model: selectedModel,
-      syntax,
-      diagramType: diagramType === 'auto' ? undefined : diagramType,
+      syntax_type: syntax,
+      subtype: diagramType === 'auto' ? undefined : diagramType,
       options: {
         rag: ragEnabled ? {
           enabled: true,
@@ -347,14 +350,14 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
               color="primary"
             />
           }
-          label="Enable RAG"
+          label="Enable References (RAG)"
         />
 
         {ragEnabled && (
           <>
             <TextField
               fullWidth
-              label="RAG Directory"
+              label="Reference Directory"
               value={ragDirectory}
               onChange={(e) => {
                 const directory = e.target.value;
@@ -370,7 +373,7 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
                   </InputAdornment>
                 ),
               }}
-              error={ragEnabled && error?.includes('RAG directory')}
+              error={ragEnabled && error?.includes('Reference directory')}
               helperText="Path to directory containing code/documentation"
             />
             <input
@@ -387,16 +390,28 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
 
         <TextField
           fullWidth
-          multiline
-          rows={4}
-          label="Diagram Description"
+          label="Title (Optional)"
           value={description}
           onChange={(e) => {
             setDescription(e.target.value);
             setError(null);
           }}
-          error={!!error && !error.includes('RAG directory')}
+          helperText="A short title to identify this diagram in the history panel"
+        />
+
+        <TextField
+          fullWidth
+          multiline
+          rows={4}
+          label="Diagram Description"
+          value={prompt}
+          onChange={(e) => {
+            setPrompt(e.target.value);
+            setError(null);
+          }}
+          error={!!error && !error.includes('Reference directory')}
           helperText={error || "Describe the diagram you want to create"}
+          required
         />
 
         <Button 
@@ -404,10 +419,17 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
           variant="contained"
           color="primary"
           size="large"
-          disabled={modelsQuery.isLoading}
+          disabled={modelsQuery.isLoading || syntaxTypesQuery.isLoading}
+          startIcon={modelsQuery.isLoading || syntaxTypesQuery.isLoading ? <CircularProgress size={20} color="inherit" /> : undefined}
         >
-          Generate Diagram
+          {modelsQuery.isLoading || syntaxTypesQuery.isLoading ? 'Loading Services...' : 'Generate Diagram'}
         </Button>
+        
+        {(modelsQuery.isLoading || syntaxTypesQuery.isLoading) && (
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block', textAlign: 'center' }}>
+            Loading required data from the backend...
+          </Typography>
+        )}
       </Paper>
     </Box>
   );

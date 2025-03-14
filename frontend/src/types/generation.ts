@@ -15,10 +15,11 @@ export interface GenerationOptions {
 }
 
 export interface DiagramGenerationRequest {
-  description: string;
+  description?: string;
+  prompt: string;
   model: string;
-  syntax: string;
-  diagramType?: string;
+  syntax_type: string;
+  subtype?: string;
   options?: GenerationOptions;
 }
 
@@ -108,8 +109,10 @@ export interface RequestChangesResponse extends DiagramGenerationResponse {
 
 export interface DiagramHistoryItem {
   id: string;
-  description: string;
+  description?: string;
+  prompt: string;
   syntax: string;
+  type: string;
   createdAt: string;
   iterations?: number;
 }

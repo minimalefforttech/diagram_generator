@@ -210,8 +210,7 @@ class DiagramValidator:
             'stateDiagram', 'erDiagram', 'gantt', 'pie', 'mindmap'
         }
         
-        # Get the first word to check diagram type
-        first_word = code.split(' ')[0].lower() if code else ''
+        first_word = code.split()[0].lower() if code else ''
         
         if first_word not in valid_starters:
             return ValidationResult(
@@ -228,19 +227,197 @@ class DiagramValidator:
                 ["Add at least one node or connection"]
             )
 
-        # Check for consistency in link styling
-        link_styles = [line for line in code.split('\n') if 'linkStyle' in line]
-        if link_styles:
-            numbered_styles = any('linkStyle 0 ' in style or 'linkStyle 1 ' in style for style in link_styles)
-            if numbered_styles:
+        # Type-specific validation
+        if first_word == 'sequenceDiagram':
+            # Validate participant declarations and message syntax
+            lines = [line.strip() for line in code.split('\n') if line.strip() and not line.strip().startswith('%')]
+            if not any(line.startswith('participant ') or line.startswith('actor ') for line in lines):
                 return ValidationResult(
                     False,
-                    ["Inconsistent link styling"],
-                    ["Use 'linkStyle default' instead of numbered linkStyles for consistent styling"]
+                    ["Missing participant declarations"],
+                    ["Sequence diagrams should declare participants using 'participant' or 'actor'"]
+                )
+            
+            # Check message syntax
+            message_lines = [line for line in lines if '->' in line or '-->' in line or '>>' in line]
+            if not message_lines:
+                return ValidationResult(
+                    False,
+                    ["No messages defined"],
+                    ["Add at least one message between participants using ->, -->, or >>"]
                 )
 
-        # Validate pie chart values if this is a pie chart
-        if first_word == 'pie':
+            # Validate message syntax
+            for line in message_lines:
+                if not (':' in line and any(x in line for x in ['->', '-->>', '->>', '-->', '-x'])):
+                    return ValidationResult(
+                        False,
+                        ["Invalid message syntax"],
+                        ["Messages should follow format: ParticipantA->ParticipantB: Message"]
+                    )
+
+        elif first_word in ['graph', 'flowchart']:
+            # Validate node and connection syntax
+            lines = [line.strip() for line in code.split('\n') if line.strip() and not line.strip().startswith('%')]
+            nodes = set()
+            connections = []
+            
+            for line in lines[1:]:  # Skip the declaration line
+                if '-->' in line or '---' in line:
+                    connections.append(line)
+                    parts = line.split('--')
+                    for part in parts[0].split():
+                        if part and not part.startswith('(') and not part.startswith('['):
+                            nodes.add(part)
+            
+            if not nodes:
+                return ValidationResult(
+                    False,
+                    ["No nodes defined"],
+                    ["Add at least one node using [] or () syntax"]
+                )
+            
+            if not connections:
+                return ValidationResult(
+                    False,
+                    ["No connections between nodes"],
+                    ["Connect nodes using --> or --- syntax"]
+                )
+
+        elif first_word == 'classDiagram':
+            # Validate class declarations and relationships
+            lines = [line.strip() for line in code.split('\n') if line.strip() and not line.strip().startswith('%')]
+            classes = []
+            relationships = []
+            
+            for line in lines[1:]:
+                if line.startswith('class '):
+                    classes.append(line)
+                elif any(x in line for x in ['<|--', '*--', 'o--', '-->', '<--']):
+                    relationships.append(line)
+                
+            if not classes:
+                return ValidationResult(
+                    False,
+                    ["No classes defined"],
+                    ["Define at least one class using 'class ClassName' syntax"]
+                )
+
+        elif first_word == 'stateDiagram':
+            # Validate state transitions
+            lines = [line.strip() for line in code.split('\n') if line.strip() and not line.strip().startswith('%')]
+            states = set()
+            transitions = []
+            
+            for line in lines[1:]:
+                if '-->' in line:
+                    transitions.append(line)
+                    parts = line.split('-->')
+                    states.add(parts[0].strip())
+                    states.add(parts[1].strip())
+                    
+            if not states:
+                return ValidationResult(
+                    False,
+                    ["No states defined"],
+                    ["Define states and transitions using state --> state syntax"]
+                )
+
+        elif first_word == 'erDiagram':
+            # Validate entity declarations and relationships
+            lines = [line.strip() for line in code.split('\n') if line.strip() and not line.strip().startswith('%')]
+            entities = set()
+            relationships = []
+            
+            for line in lines[1:]:
+                if '|' in line and 'o' in line:  # Relationship line
+                    relationships.append(line)
+                    parts = line.split()
+                    if parts:
+                        entities.add(parts[0])
+                elif '{' in line:  # Entity declaration
+                    entity_name = line.split('{')[0].strip()
+                    entities.add(entity_name)
+                    
+            if not entities:
+                return ValidationResult(
+                    False,
+                    ["No entities defined"],
+                    ["Define at least one entity with properties"]
+                )
+                
+            if not relationships:
+                return ValidationResult(
+                    False,
+                    ["No relationships defined"],
+                    ["Define relationships between entities using |o--o|, ||--|{, etc."]
+                )
+
+        elif first_word == 'gantt':
+            # Validate gantt chart structure
+            lines = [line.strip() for line in code.split('\n') if line.strip() and not line.strip().startswith('%')]
+            has_date_format = any('dateFormat' in line for line in lines)
+            has_tasks = any(':' in line for line in lines[1:])  # Skip title line
+            
+            if not has_date_format:
+                return ValidationResult(
+                    False,
+                    ["Missing date format"],
+                    ["Specify date format using dateFormat directive"]
+                )
+                
+            if not has_tasks:
+                return ValidationResult(
+                    False,
+                    ["No tasks defined"],
+                    ["Add at least one task with duration"]
+                )
+
+        elif first_word == 'mindmap':
+            # Mindmap validation (already implemented)
+            lines = [line for line in code.split('\n') if line.strip() and not line.strip().startswith('%')]
+            if len(lines) < 2:
+                return ValidationResult(
+                    False,
+                    ["Mindmap must have at least one node"],
+                    ["Add at least one root node to the mindmap"]
+                )
+            
+            # Check for single root
+            root_level_items = []
+            for line in lines[1:]:  # Skip the mindmap declaration
+                indent = len(line) - len(line.lstrip())
+                if indent == 0 or (indent == 2 and line.strip().startswith('root')):
+                    root_level_items.append(line.strip())
+            
+            if len(root_level_items) == 0:
+                return ValidationResult(
+                    False,
+                    ["Mindmap missing root node"],
+                    ["Add a root level node to the mindmap"]
+                )
+            elif len(root_level_items) > 1:
+                return ValidationResult(
+                    False,
+                    ["Multiple root nodes detected"],
+                    ["Mindmap must have exactly one root node. Remove or indent additional root level items"]
+                )
+
+            # Validate indent structure
+            prev_indent = 0
+            for line in lines[1:]:
+                if not line.strip():
+                    continue
+                indent = len(line) - len(line.lstrip())
+                if indent > prev_indent + 2:
+                    return ValidationResult(
+                        False,
+                        ["Invalid indentation"],
+                        ["Each level should be indented by 2 spaces relative to its parent"]
+                    )
+                prev_indent = indent
+
+        elif first_word == 'pie':
             lines = code.split('\n')[1:]  # Skip the pie/title line
             for line in lines:
                 if line.strip() and not line.strip().startswith('%'):  # Skip empty lines and comments
@@ -256,6 +433,17 @@ class DiagramValidator:
                                 ["Invalid pie chart value"],
                                 ["Pie chart values must be numbers (not percentages)"]
                             )
+
+        # Check for consistency in link styling
+        link_styles = [line for line in code.split('\n') if 'linkStyle' in line]
+        if link_styles:
+            numbered_styles = any('linkStyle 0 ' in style or 'linkStyle 1 ' in style for style in link_styles)
+            if numbered_styles:
+                return ValidationResult(
+                    False,
+                    ["Inconsistent link styling"],
+                    ["Use 'linkStyle default' instead of numbered linkStyles for consistent styling"]
+                )
 
         return ValidationResult(True)
 
@@ -299,33 +487,220 @@ class DiagramValidator:
                 ["Add diagram content between start and end tags"]
             )
 
-        # Extract diagram type from start tag
+        # Extract diagram type and validate type-specific syntax
         start_line = code.split('\n')[0].lower()
-        for diagram_type, tag in PLANTUML_START_TAGS.items():
-            if tag in start_line:
-                if diagram_type in ['class', 'sequence', 'state', 'activity', 'component', 'deployment', 'object', 'usecase', 'er', 'timing']:
-                    # For @startuml diagrams, we should look for type-specific syntax
-                    type_indicators = {
-                        'class': ['class ', 'interface ', 'enum '],
-                        'sequence': ['participant ', '-> ', '<- '],
-                        'state': ['state ', '[*] -> '],
-                        'activity': ['start', 'stop', ':'],
-                        'component': ['component ', 'interface ', 'package '],
-                        'deployment': ['node ', 'artifact ', 'database '],
-                        'object': ['object ', 'map '],
-                        'usecase': ['actor ', 'usecase '],
-                        'er': ['entity ', 'relationship '],
-                        'timing': ['clock ', 'binary ']
-                    }
-                    
-                    # Check for type-specific indicators
-                    indicators = type_indicators.get(diagram_type, [])
-                    if not any(indicator in content.lower() for indicator in indicators):
-                        return ValidationResult(
-                            False,
-                            [f"Missing {diagram_type} diagram specific syntax"],
-                            [f"Add {diagram_type}-specific elements like {', '.join(indicators)}"]
-                        )
+        content_lines = [line.strip() for line in content.split('\n') if line.strip()]
+
+        if '@startmindmap' in start_line:
+            # Validate mindmap structure
+            if not any('*' in line for line in content_lines):
+                return ValidationResult(
+                    False,
+                    ["No mindmap nodes found"],
+                    ["Add at least one node using * syntax"]
+                )
+
+            # Check node hierarchy
+            prev_level = 0
+            for line in content_lines:
+                level = len(line) - len(line.lstrip('*'))
+                if level > prev_level + 1:
+                    return ValidationResult(
+                        False,
+                        ["Invalid node hierarchy"],
+                        ["Each level can only increase by one * at a time"]
+                    )
+                prev_level = level
+
+        elif '@startuml' in start_line:
+            # Look for diagram type indicators
+            if any(line.startswith('class ') for line in content_lines):
+                # Class diagram validation
+                classes = []
+                relationships = []
+                
+                for line in content_lines:
+                    if line.startswith('class '):
+                        classes.append(line)
+                    elif any(x in line for x in ['<|--', '*--', 'o--', '-->', '<--', '<|-', '-|>']):
+                        relationships.append(line)
+                
+                if not classes:
+                    return ValidationResult(
+                        False,
+                        ["No classes defined"],
+                        ["Define at least one class using 'class' keyword"]
+                    )
+
+            elif '->' in content or '-->' in content:
+                # Sequence diagram validation
+                found_participant = False
+                found_message = False
+                
+                for line in content_lines:
+                    if line.startswith('participant ') or line.startswith('actor '):
+                        found_participant = True
+                    elif '->' in line or '-->' in line:
+                        if ':' not in line:
+                            return ValidationResult(
+                                False,
+                                ["Invalid message syntax"],
+                                ["Messages should include a description after ':' symbol"]
+                            )
+                        found_message = True
+                
+                if not found_participant:
+                    return ValidationResult(
+                        False,
+                        ["No participants defined"],
+                        ["Define participants using 'participant' or 'actor' keywords"]
+                    )
+                
+                if not found_message:
+                    return ValidationResult(
+                        False,
+                        ["No messages defined"],
+                        ["Add at least one message between participants"]
+                    )
+
+            elif 'state ' in content or '[*] ->' in content:
+                # State diagram validation
+                states = set()
+                transitions = []
+                
+                for line in content_lines:
+                    if line.startswith('state '):
+                        states.add(line.split()[1])
+                    elif '->' in line:
+                        transitions.append(line)
+                        parts = line.split('->')
+                        if len(parts) == 2:
+                            states.add(parts[0].strip())
+                            states.add(parts[1].split(':')[0].strip())
+                
+                if not states and not any('[*]' in line for line in content_lines):
+                    return ValidationResult(
+                        False,
+                        ["No states defined"],
+                        ["Define states using 'state' keyword or [*] for start/end states"]
+                    )
+                
+                if not transitions:
+                    return ValidationResult(
+                        False,
+                        ["No transitions defined"],
+                        ["Add transitions between states using ->"]
+                    )
+
+            elif any(line.startswith('package ') or line.startswith('[') or line.startswith('component ') for line in content_lines):
+                # Component diagram validation
+                components = []
+                connections = []
+                
+                for line in content_lines:
+                    if line.startswith('package ') or line.startswith('[') or line.startswith('component '):
+                        components.append(line)
+                    elif '-->' in line or '<--' in line:
+                        connections.append(line)
+                
+                if not components:
+                    return ValidationResult(
+                        False,
+                        ["No components defined"],
+                        ["Define components using 'component', 'package', or [] syntax"]
+                    )
+
+            elif any(line.startswith('usecase ') or line.startswith('actor ') for line in content_lines):
+                # Use case diagram validation
+                elements = []
+                connections = []
+                
+                for line in content_lines:
+                    if line.startswith('usecase ') or line.startswith('actor '):
+                        elements.append(line)
+                    elif '-->' in line or '--' in line:
+                        connections.append(line)
+                
+                if not elements:
+                    return ValidationResult(
+                        False,
+                        ["No actors or use cases defined"],
+                        ["Define actors and use cases using 'actor' and 'usecase' keywords"]
+                    )
+
+            elif any(line.startswith('start') or line.startswith(':') or line.startswith('if ') for line in content_lines):
+                # Activity diagram validation
+                if not any(line.startswith('start') for line in content_lines):
+                    return ValidationResult(
+                        False,
+                        ["Missing start node"],
+                        ["Activity diagrams must begin with 'start'"]
+                    )
+                
+                if not any(line.startswith('stop') or line.startswith('end') for line in content_lines):
+                    return ValidationResult(
+                        False,
+                        ["Missing end node"],
+                        ["Activity diagrams must end with 'stop' or 'end'"]
+                    )
+
+                # Check activity definitions
+                if not any(line.startswith(':') for line in content_lines):
+                    return ValidationResult(
+                        False,
+                        ["No activities defined"],
+                        ["Define activities using :activity name; syntax"]
+                    )
+
+            elif any(line.startswith('entity ') for line in content_lines):
+                # ER diagram validation
+                entities = set()
+                relationships = []
+                
+                for line in content_lines:
+                    if line.startswith('entity '):
+                        entities.add(line.split()[1])
+                    elif any(x in line for x in ['--|{', '--||', '--o|', '--||']):
+                        relationships.append(line)
+                
+                if not entities:
+                    return ValidationResult(
+                        False,
+                        ["No entities defined"],
+                        ["Define entities using 'entity' keyword"]
+                    )
+                
+                if not relationships:
+                    return ValidationResult(
+                        False,
+                        ["No relationships defined"],
+                        ["Define relationships between entities"]
+                    )
+
+        elif '@startgantt' in start_line:
+            # Gantt chart validation
+            has_project = False
+            has_tasks = False
+            
+            for line in content_lines:
+                if 'project starts' in line.lower():
+                    has_project = True
+                elif '] lasts' in line or '] starts' in line:
+                    has_tasks = True
+            
+            if not has_project:
+                return ValidationResult(
+                    False,
+                    ["Missing project start"],
+                    ["Define project start date using 'Project starts' directive"]
+                )
+            
+            if not has_tasks:
+                return ValidationResult(
+                    False,
+                    ["No tasks defined"],
+                    ["Add tasks using [Task] syntax with starts/lasts duration"]
+                )
 
         return ValidationResult(True)
 
