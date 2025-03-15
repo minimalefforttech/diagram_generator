@@ -35,6 +35,7 @@ interface ChatPanelProps {
   onTypeChange?: (type: string) => void;
   onRagDirectoryChange?: (directory: string) => void;
   ragEnabled?: boolean; // Add this prop to know if RAG is enabled
+  currentSyntaxType?: string; // Add this prop to get current diagram syntax type
 }
 
 const ChatPanel: React.FC<ChatPanelProps> = ({
@@ -43,7 +44,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   onSyntaxChange,
   onTypeChange,
   onRagDirectoryChange,
-  ragEnabled = false // Default to false if not provided
+  ragEnabled = false, // Default to false if not provided
+  currentSyntaxType = 'mermaid' // Default to mermaid if not provided
 }) => {
   const theme = useTheme();
   const [message, setMessage] = useState('');
@@ -51,7 +53,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
   const [selectedModel, setSelectedModel] = useState('');
   const [modelError, setModelError] = useState<string | null>(null);
   const [lastSelectedModel, setLastSelectedModel] = useState('');
-  const [currentSyntax, setCurrentSyntax] = useState('mermaid');
+  const [currentSyntax, setCurrentSyntax] = useState(currentSyntaxType);
   const [currentType, setCurrentType] = useState('auto');
   const [settingsExpanded, setSettingsExpanded] = useState(false);
   const [ragDirectory, setRagDirectory] = useState(() => {
@@ -77,6 +79,13 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
       setMessages([]);
     }
   }, [currentDiagram]);
+
+  // Update currentSyntax when currentSyntaxType prop changes
+  useEffect(() => {
+    if (currentSyntaxType) {
+      setCurrentSyntax(currentSyntaxType);
+    }
+  }, [currentSyntaxType]);
 
   const handleModelChange = (model: string) => {
     setSelectedModel(model);

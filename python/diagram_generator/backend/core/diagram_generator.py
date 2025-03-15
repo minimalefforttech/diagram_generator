@@ -230,6 +230,40 @@ Source diagram:
             
         return code, notes
         
+    async def update_diagram(
+        self,
+        diagram_code: str,
+        update_notes: str,
+        diagram_type: str = "mermaid",
+        options: Optional[Union[Dict, DiagramGenerationOptions]] = None
+    ) -> DiagramAgentOutput:
+        """Update an existing diagram based on provided notes/changes.
+        
+        Args:
+            diagram_code: The existing diagram code
+            update_notes: Notes/changes to apply to the diagram
+            diagram_type: Type of diagram (mermaid, plantuml)
+            options: Optional generation options
+            
+        Returns:
+            DiagramAgentOutput containing the updated diagram
+        """
+        # Convert dict options to DiagramGenerationOptions
+        generation_options = self._prepare_options(options)
+        
+        # Initialize RAG provider if needed
+        if generation_options.rag.enabled and not self.rag_provider:
+            await self._setup_rag_provider(generation_options.rag)
+            
+        # Forward the update request to the diagram agent
+        return await self.diagram_agent.update_diagram(
+            diagram_code=diagram_code,
+            update_notes=update_notes,
+            diagram_type=diagram_type,
+            options=generation_options,
+            rag_provider=self.rag_provider
+        )
+        
     def _prepare_options(
         self, 
         options: Optional[Union[Dict, DiagramGenerationOptions]] = None

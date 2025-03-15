@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 import json
 
 # Import logging functions
-from diagram_generator.backend.api.logs import log_info, log_error
+from diagram_generator.backend.api.logs import log_info, log_error, log_warning
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ class DocumentMetadata(BaseModel):
     source: str = Field("", description="Source file or origin")
     chunk_id: int = Field(0, description="Chunk ID")
     chunk_size: int = Field(0, description="Size of chunk in characters")
-    total_chunks: int = Field(1, description="Total chunks in the source")
+    total_chunks: int = Field(1, description="Total chunks in source")
     file_extension: Optional[str] = Field(None, description="File extension")
     line_start: Optional[int] = Field(None, description="Starting line number")
     line_end: Optional[int] = Field(None, description="Ending line number")

@@ -132,7 +132,8 @@ const App: React.FC = () => {
       const response = await diagramService.requestChanges(
         diagramId,
         message,
-        model
+        model,
+        currentSyntax // Pass the current syntax type
       );
 
       setDiagram(prev => ({
@@ -169,19 +170,19 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLoadDiagram = async (diagramId: string) => {
+  const handleLoadDiagram = async (diagramId: string, syntax: string) => {
     setDiagram(prev => ({
       ...prev,
       loading: true,
       error: undefined
     }));
-    
+
     // First make sure we're in workspace screen
     setCurrentScreen('workspace');
-    
+
     try {
       const loadedDiagram = await diagramService.getDiagramById(diagramId);
-      
+
       // Now update the diagram data
       setDiagram({
         loading: false,
@@ -189,7 +190,10 @@ const App: React.FC = () => {
         error: undefined,
         id: diagramId
       });
-      
+
+      // Set the syntax
+      setCurrentSyntax(syntax);
+
       // Fetch agent iterations
       const iterationResponse = await diagramService.getAgentIterations(diagramId);
       setAgentIterations(iterationResponse.current_iteration);

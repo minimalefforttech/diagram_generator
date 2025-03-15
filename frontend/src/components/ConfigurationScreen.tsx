@@ -354,7 +354,7 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
             />
           </>
         )}
-
+{/* 
         <TextField
           fullWidth
           label="Title (Optional)"
@@ -365,7 +365,7 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
             setError(null);
           }}
           helperText="A short title to identify this diagram in the history panel"
-        />
+        /> */}
 
         <TextField
           fullWidth

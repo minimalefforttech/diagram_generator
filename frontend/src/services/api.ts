@@ -93,33 +93,19 @@ export const diagramService = {
     }
   },
 
-  async modifyDiagram(requestData: DiagramModifyRequest): Promise<DiagramGenerationResponse> {
+  async requestChanges(diagramId: string, changes: string, model: string, syntax: string = 'mermaid'): Promise<RequestChangesResponse> {
     try {
-      const response = await api.post<DiagramGenerationResponse>('/diagrams/modify', requestData);
-      return response.data;
-    } catch (error) {
-      throw logError(error, 'Modify Diagram');
-    }
-  },
-  
-  async convertSyntax(code: string, fromSyntax: string, toSyntax: string): Promise<string> {
-    try {
-      const response = await api.post<{ code: string }>('/diagrams/convert', {
-        code,
-        from: fromSyntax,
-        to: toSyntax,
-      });
-      return response.data.code;
-    } catch (error) {
-      throw logError(error, 'Convert Syntax');
-    }
-  },
-
-  async requestChanges(diagramId: string, changes: string, model: string): Promise<RequestChangesResponse> {
-    try {
-      const response = await api.post<RequestChangesResponse>(`/diagrams/${diagramId}/changes`, {
-        changes,
+      const response = await api.post<RequestChangesResponse>(`/diagrams/diagram/${diagramId}/update`, {
+        prompt: changes,  // Changed from 'changes' to 'prompt' to match backend expectation
         model,
+        syntax_type: syntax,  // Use the provided syntax type instead of hardcoding to 'mermaid'
+        options: {
+          agent: {
+            enabled: true,
+            max_iterations: 3,
+            model_name: model  // Include model in the agent options structure
+          }
+        }
       });
       return response.data;
     } catch (error) {

@@ -216,7 +216,7 @@ Preserve the exact structure while only fixing the validation errors."""
             return ""
 
     def _enhance_query_for_diagram(self, description: str, diagram_type: DiagramType) -> str:
-        """Enhance the search query with diagram-specific terms to improve context retrieval."""
+        """Enhance the search query with diagram-specific terms to improve context retrieval.""" 
         diagram_type_str = diagram_type.value
         
         # Add diagram-specific search terms based on the type
@@ -240,7 +240,7 @@ Preserve the exact structure while only fixing the validation errors."""
             return f"{description} UML class definition interface relationship"
         
     def _strip_comments(self, code: str) -> str:
-        """Remove comments and markdown formatting without affecting diagram structure."""
+        """Remove comments and markdown formatting without affecting diagram structure.""" 
         # Remove markdown code block markers if present, preserving content structure
         if "```" in code:
             lines = []
@@ -379,7 +379,11 @@ Additional rule: Follow the structure shown in the example above.
             syntax_rules=syntax_rules
         )
 
-        model = agent_config.model_name if agent_config and agent_config.enabled else self.default_model
+        # Ensure model is never None by using default_model as fallback
+        model = self.default_model
+        if agent_config and agent_config.enabled and agent_config.model_name:
+            model = agent_config.model_name
+            
         temperature = agent_config.temperature if agent_config and agent_config.enabled else 0.2
         
         # Use a special system prompt that emphasizes using the code context
@@ -397,7 +401,7 @@ The code context contains the actual implementation that your diagram should acc
 
         try:
             log_llm("Starting LLM generation", {
-                "model": model,
+                "model": model,  # This will never be None now
                 "prompt_length": len(prompt),
                 "context_length": len(formatted_context),
                 "temperature": temperature,
@@ -407,7 +411,7 @@ The code context contains the actual implementation that your diagram should acc
             # TODO: If context is very large, consider chunking it or using a different approach
             
             result = await self.ollama.generate(
-                model=model,
+                model=model,  # This will never be None now
                 prompt=prompt,
                 temperature=temperature,
                 system=system
@@ -646,6 +650,61 @@ The code context contains the actual implementation that your diagram should acc
 
         return output
 
+    async def update_diagram(
+        self,
+        diagram_code: str,
+        update_notes: str,
+        diagram_type: str = "mermaid",
+        options: Optional[DiagramGenerationOptions] = None,
+        rag_provider: Optional[RAGProvider] = None,
+    ) -> DiagramAgentOutput:
+        """Update an existing diagram based on provided notes/changes."""
+        # Validate inputs
+        if not diagram_code or not diagram_code.strip():
+            raise ValueError("diagram_code cannot be empty")
+            
+        if not update_notes or not update_notes.strip():
+            raise ValueError("update_notes cannot be empty")
+            
+        # Validate diagram_type
+        try:
+            DiagramType(diagram_type.lower())
+        except ValueError:
+            valid_types = [t.value for t in DiagramType]
+            raise ValueError(f"Invalid diagram_type. Must be one of: {valid_types}")
+            
+        if not options:
+            options = DiagramGenerationOptions()
+
+        log_info(f"Updating {diagram_type} diagram with notes: {update_notes}")
+
+        # Create a special augmented description that includes the existing diagram code
+        augmented_description = f"""UPDATE EXISTING DIAGRAM
+
+EXISTING DIAGRAM CODE:
+{diagram_code}
+
+REQUESTED CHANGES:
+{update_notes}
+
+Please update the diagram according to these changes while preserving the overall structure.
+"""
+        # Extract RAG directory from options
+        rag_directory = options.rag.api_doc_dir if options.rag and options.rag.enabled else None
+            
+        # Create agent input with the augmented description
+        input_data = DiagramAgentInput(
+            description=augmented_description,
+            diagram_type=diagram_type,
+            options=options,
+            rag_context=""  # We'll get context from _determine_requirements
+        )
+
+        # Run the agent with the augmented description
+        output = await self.run_agent(input_data)
+
+        return output
+
     async def run_agent(self, input_data: DiagramAgentInput) -> DiagramAgentOutput:
         """Run the diagram agent to generate and validate a diagram."""
         # Initialize options if not provided
@@ -810,7 +869,11 @@ The code context contains the actual implementation that your diagram should acc
             errors="\n".join(errors)
         )
 
-        model = config.model_name if config and config.enabled else self.default_model
+        # Ensure model is never None by using default_model as fallback
+        model = self.default_model
+        if config and config.enabled and config.model_name:
+            model = config.model_name
+            
         temperature = config.temperature if config and config.enabled else 0.2
 
         # Add example code to system prompt
@@ -837,7 +900,7 @@ Your output must match:
 
         try:
             result = await self.ollama.generate(
-                model=model,
+                model=model,  # This will never be None now
                 prompt=prompt,
                 temperature=temperature,
                 system=system

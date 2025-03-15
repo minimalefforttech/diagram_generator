@@ -321,9 +321,10 @@ async def update_diagram(
                 "max_iterations": 3
             }
 
-        # Generate the updated diagram
-        result = await diagram_generator.generate_diagram(
-            description=request.prompt,
+        # Use the update_diagram method instead of generate_diagram
+        result = await diagram_generator.update_diagram(
+            diagram_code=diagram.code,
+            update_notes=request.prompt,
             diagram_type=diagram_type.value,
             options=generation_options
         )

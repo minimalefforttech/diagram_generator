@@ -26,7 +26,7 @@ import { diagramService } from '../services/api';
 import { DiagramHistoryItem } from '../types/generation';
 
 interface DiagramHistoryProps {
-  onSelectDiagram: (diagramId: string) => void;
+  onSelectDiagram: (diagramId: string, syntax: string) => void;
   currentDiagramId?: string;
   alwaysExpanded?: boolean;
 }
@@ -228,9 +228,9 @@ const DiagramHistory = forwardRef<DiagramHistoryRefHandle, DiagramHistoryProps>(
                 >
                   <ListItemButton
                     selected={item.id === currentDiagramId}
-                    onClick={() => onSelectDiagram(item.id)}
+                    onClick={() => onSelectDiagram(item.id, item.syntax)}
                   >
-                    <ListItemText 
+                    <ListItemText
                       primary={item.description || item.prompt}
                       secondary={
                         <Box sx={{ display: 'flex', gap: 1 }}>

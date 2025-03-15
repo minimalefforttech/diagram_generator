@@ -199,11 +199,23 @@ class Storage:
         """Retrieve a diagram record.
         
         Args:
-            diagram_id: ID of diagram to retrieve
+            diagram_id: ID of diagram to retrieve. Special value "current" returns the most recent diagram.
             
         Returns:
             DiagramRecord or None: Retrieved diagram record
         """
+        # Special case: "current" returns the most recently created diagram
+        if (diagram_id == "current"):
+            if not self.index["diagrams"]:
+                return None  # No diagrams available
+            
+            # Find the most recently created diagram using the timestamp in the index
+            latest_diagram_id = max(
+                self.index["diagrams"].items(),
+                key=lambda item: datetime.fromisoformat(item[1]["created_at"])
+            )[0]
+            diagram_id = latest_diagram_id
+            
         diagram_path = self.diagrams_path / f"{diagram_id}.json"
         
         if not diagram_path.exists():

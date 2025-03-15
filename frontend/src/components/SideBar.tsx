@@ -7,7 +7,7 @@ import DiagramHistory, { DiagramHistoryRefHandle } from './DiagramHistory';
 
 interface SideBarProps {
   logs: any[];
-  onSelectDiagram: (diagramId: string) => void;
+  onSelectDiagram: (diagramId: string, syntax: string) => void;
   currentDiagramId?: string;
   historyRef?: React.RefObject<DiagramHistoryRefHandle>;
 }
@@ -174,8 +174,8 @@ export const SideBar: React.FC<SideBarProps> = ({
           ) : (
             <DiagramHistory 
               ref={historyRef}
-              onSelectDiagram={(id) => {
-                onSelectDiagram(id);
+              onSelectDiagram={(id, syntax) => {
+                onSelectDiagram(id, syntax);
                 setIsExpanded(false); // Close sidebar after selecting diagram
               }}
               currentDiagramId={currentDiagramId}
