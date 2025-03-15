@@ -5,6 +5,7 @@ import logging
 from diagram_generator.backend.core.diagram_generator import DiagramGenerator
 from diagram_generator.backend.utils.diagram_validator import DiagramType
 from diagram_generator.backend.models.configs import DiagramGenerationOptions
+from diagram_generator.backend.api.logs import log_info, log_error
 
 logger = logging.getLogger(__name__)
 
@@ -52,5 +53,5 @@ class DiagramGeneratorService:
             }
 
         except Exception as e:
-            logger.error(f"Failed to generate diagram: {str(e)}", exc_info=True)
+            log_error(f"Failed to generate diagram: {str(e)}", exc_info=True)
             raise

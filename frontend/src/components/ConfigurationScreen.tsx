@@ -13,15 +13,11 @@ import {
   CircularProgress,
   Switch,
   FormControlLabel,
-  IconButton,
-  InputAdornment,
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { diagramService } from '../services/api';
 import ThemeToggle from './ThemeToggle';
 import { ModelInfo } from '../types';
-import FolderOpenIcon from '@mui/icons-material/FolderOpen';
-
 // Add webkitdirectory to HTMLInputElement
 declare module 'react' {
   interface HTMLAttributes<T> extends AriaAttributes, DOMAttributes<T> {
@@ -75,8 +71,6 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
   const [preferences, setPreferences] = useState<UserPreferences>({});
   const [ragEnabled, setRagEnabled] = useState(false);
   const [ragDirectory, setRagDirectory] = useState('');
-  const directoryInputRef = useRef<HTMLInputElement>(null);
-
   // Rest of the component code remains the same...
   // Copy from the previous version starting from modelsQuery definition
   const modelsQuery = useQuery<ModelInfo[]>({
@@ -143,23 +137,6 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
         api_doc_dir: directory
       }
     });
-  };
-
-  // Handle directory selection
-  const handleDirectorySelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (files && files[0]) {
-      // Get the directory path from the file
-      const directory = files[0].webkitRelativePath.split('/')[0];
-      setRagDirectory(directory);
-      saveRagPreferences(ragEnabled, directory);
-    }
-  };
-
-  const openDirectoryDialog = () => {
-    if (directoryInputRef.current) {
-      directoryInputRef.current.click();
-    }
   };
 
   // Reset diagram type when syntax changes
@@ -306,7 +283,7 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
               setDiagramType('auto');
               savePreferences({ syntax: newSyntax, diagramType: 'auto' });
               if (onSyntaxChange) {
-                onSyntaxChange(newSyntax);
+          onSyntaxChange(newSyntax);
               }
             }}
           >
@@ -314,6 +291,14 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
           </Select>
           <FormHelperText>Select the diagram syntax to use</FormHelperText>
         </FormControl>
+        
+        {syntax.toLowerCase() === 'plantuml' && (
+          <Box sx={{ mb: 1 }}>
+            <Typography variant="body2" color="warning.main" sx={{ display: 'flex', alignItems: 'center' }}>
+              ⚠️ PlantUML may be unreliable with local models. Results may vary.
+            </Typography>
+          </Box>
+        )}
 
         <FormControl fullWidth>
           <InputLabel id="type-label">Diagram Type</InputLabel>
@@ -364,26 +349,8 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
                 setRagDirectory(directory);
                 saveRagPreferences(ragEnabled, directory);
               }}
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton onClick={openDirectoryDialog} edge="end">
-                      <FolderOpenIcon />
-                    </IconButton>
-                  </InputAdornment>
-                ),
-              }}
               error={ragEnabled && error?.includes('Reference directory')}
-              helperText="Path to directory containing code/documentation"
-            />
-            <input
-              type="file"
-              ref={directoryInputRef}
-              onChange={handleDirectorySelect}
-              style={{ display: 'none' }}
-              // @ts-ignore -- directory input attributes
-              webkitdirectory=""
-              directory=""
+              helperText="Enter the full path to a directory containing code files (.py, .ts, .js, etc.) or documentation (.md). This will significantly increase the time taken to generate. This feature is expiremental."
             />
           </>
         )}
@@ -392,6 +359,7 @@ const ConfigurationScreen: React.FC<ConfigurationScreenProps> = ({
           fullWidth
           label="Title (Optional)"
           value={description}
+          hidden={true}  // Not currently working
           onChange={(e) => {
             setDescription(e.target.value);
             setError(null);

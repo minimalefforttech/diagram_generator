@@ -9,5 +9,5 @@ requests>=2.31.0
 python-dotenv>=1.0.0
 aiohttp>=3.9.0         # For async HTTP and Ollama API calls
 jinja2>=3.1.0          # For template handling
-faiss-cpu>=1.7.4       # For RAG functionality
-numpy>=1.26.0          # Required by faiss-cpu
+numpy>=1.26.0          # For vector operations
+httpx>=0.25.2          # For async HTTP client

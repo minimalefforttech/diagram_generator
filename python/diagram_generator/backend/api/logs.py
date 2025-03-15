@@ -46,9 +46,18 @@ def add_entry(type: str, message: str, details: Any = None) -> LogRecord:
     return entry
 
 # Helper functions for logging specific types of events
+def log_info(message: str, details: Optional[Any] = None) -> LogRecord:
+    """Log an info-related event."""
+    logger.info(message)
+    return add_entry("info", message, details)
 def log_llm(message: str, details: Optional[Any] = None) -> LogRecord:
     """Log an LLM-related event."""
+    logger.info(message)
     return add_entry("llm", message, details)
+def log_warning(message: str, details: Optional[Any] = None) -> LogRecord:
+    """Log a warning event."""
+    logger.warning(message, extra={"details": details})
+    return add_entry("warning", message, details)
 
 import traceback
 

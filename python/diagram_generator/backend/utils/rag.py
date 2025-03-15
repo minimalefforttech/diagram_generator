@@ -1,112 +1,325 @@
-"""RAG utilities for document embedding and retrieval."""
+"""RAG (Retrieval Augmented Generation) utility for retrieving relevant context."""
 
 import os
-from typing import Dict, List, Optional
+import re
+import logging
+from typing import List, Dict, Optional, Any, Union
+import asyncio
+from pydantic import BaseModel, Field
+import json
 
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import DirectoryLoader, TextLoader
-from langchain_community.embeddings import OllamaEmbeddings
-from langchain_community.vectorstores import FAISS
+# Import logging functions
+from diagram_generator.backend.api.logs import log_info, log_error
 
-from diagram_generator.backend.models.configs import DiagramRAGConfig
+logger = logging.getLogger(__name__)
 
+class EmbeddingResult(BaseModel):
+    """Model for embedding results."""
+    embedding: List[float] = Field(..., description="Vector embedding")
+    error: Optional[str] = Field(None, description="Error message if failed")
+
+class DocumentMetadata(BaseModel):
+    """Metadata for a document."""
+    source: str = Field("", description="Source file or origin")
+    chunk_id: int = Field(0, description="Chunk ID")
+    chunk_size: int = Field(0, description="Size of chunk in characters")
+    total_chunks: int = Field(1, description="Total chunks in the source")
+    file_extension: Optional[str] = Field(None, description="File extension")
+    line_start: Optional[int] = Field(None, description="Starting line number")
+    line_end: Optional[int] = Field(None, description="Ending line number")
+
+class Document(BaseModel):
+    """Document with content and metadata."""
+    content: str = Field(..., description="Document content")
+    metadata: DocumentMetadata = Field(default_factory=DocumentMetadata)
+
+class EmbeddedDocument(Document):
+    """Document with embedding."""
+    embedding: List[float] = Field(..., description="Vector embedding")
+    score: Optional[float] = Field(None, description="Similarity score")
+
+class SearchResult(BaseModel):
+    """Search results with documents and scores."""
+    query: str = Field(..., description="Search query")
+    documents: List[EmbeddedDocument] = Field(default_factory=list, description="Matching documents")
+    scores: List[float] = Field(default_factory=list, description="Similarity scores")
+
+class RetrievalResult(BaseModel):
+    """Result from retrieval including documents and metadata."""
+    documents: List[Document] = Field(default_factory=list, description="Retrieved documents")
+    query: str = Field("", description="Original query")
+
+class RAGConfig(BaseModel):
+    """Configuration for RAG provider."""
+    enabled: bool = Field(False, description="Whether RAG is enabled")
+    api_doc_dir: Optional[str] = Field(None, description="Directory with API docs")
+    embedding_model: str = Field("nomic-embed-text", description="Embedding model to use")
+    max_documents: int = Field(5, description="Maximum documents to retrieve")
+    similarity_threshold: float = Field(0.2, description="Minimum similarity score")
+
+class RAGStats(BaseModel):
+    """Statistics for RAG provider."""
+    total_documents: int = Field(0, description="Total documents processed")
+    loaded_files: int = Field(0, description="Number of files loaded")
+    failed_files: int = Field(0, description="Number of files that failed to load")
+    embedding_requests: int = Field(0, description="Number of embedding requests made")
+    search_requests: int = Field(0, description="Number of search requests made")
 
 class RAGProvider:
-    """Handles document loading, embedding, and retrieval for RAG."""
+    """Provider for Retrieval Augmented Generation."""
 
-    def __init__(
-        self, 
-        config: DiagramRAGConfig,
-        ollama_base_url: str = "http://localhost:11434",
-        embedding_model: str = "nomic-embed-text",
-    ):
-        """Initialize RAGProvider.
-        
-        Args:
-            config: RAG configuration
-            ollama_base_url: Ollama API base URL
-            embedding_model: Embedding model to use
-        """
+    def __init__(self, config: Any, ollama_base_url: str = "http://localhost:11434"):
+        """Initialize RAG provider."""
         self.config = config
-        self.base_url = ollama_base_url
-        self.embedding_model = embedding_model
-        self.vector_store = None
+        # Safe access to config attributes
+        self.similarity_threshold = getattr(config, 'similarity_threshold', 0.2)
+        self.max_documents = getattr(config, 'max_documents', 5)
+        self.embedding_model = getattr(config, 'embedding_model', 'nomic-embed-text')
         
-    def load_docs_from_directory(self, directory_path: Optional[str] = None) -> bool:
-        """Load documents from a directory and create embeddings.
-        
-        Args:
-            directory_path: Path to directory containing documents (overrides config)
-            
-        Returns:
-            bool: True if documents were loaded successfully
-        """
+        self.ollama_base_url = ollama_base_url
+        self.documents: List[EmbeddedDocument] = []
+        self.stats = RAGStats()
+        self.logger = logging.getLogger(__name__)
+
+    def _is_code_file(self, filename: str) -> bool:
+        """Check if a file is a code file based on extension."""
+        code_extensions = {
+            '.py', '.js', '.ts', '.jsx', '.tsx', '.java', '.c', '.cpp', '.h', 
+            '.cs', '.go', '.rs', '.php', '.rb', '.swift', '.kt', '.scala',
+            '.html', '.css', '.scss', '.less', '.json', '.yaml', '.yml',
+            '.md', '.rst', '.txt', '.sh', '.bash', '.ps1', '.bat', '.cmd'
+        }
+        _, ext = os.path.splitext(filename)
+        return ext.lower() in code_extensions
+
+    async def load_docs_from_directory(self, directory: str, use_simple_file_splitting: bool = False) -> bool:
+        """Load documents from directory using simple file-based splitting."""
         try:
-            doc_dir = directory_path or self.config.api_doc_dir
-            if not doc_dir or not os.path.isdir(doc_dir):
+            if not os.path.isdir(directory):
+                log_error(f"Directory not found: {directory}")
                 return False
-                
-            # Load markdown files from directory
-            loader = DirectoryLoader(
-                doc_dir, 
-                glob="**/*.md",
-                loader_cls=TextLoader
-            )
-            documents = loader.load()
+
+            log_info(f"Loading documents from {directory}")
+            self.documents = []  # Reset documents
+            loaded_files = 0
+            failed_files = 0
+
+            # Simple file-based splitting approach - each file is one document
+            if use_simple_file_splitting:
+                for root, _, files in os.walk(directory):
+                    for filename in files:
+                        if not self._is_code_file(filename):
+                            continue
+                            
+                        file_path = os.path.join(root, filename)
+                        rel_path = os.path.relpath(file_path, directory)
+                        
+                        try:
+                            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                                content = f.read()
+                                
+                            # Skip empty or very small files
+                            if len(content.strip()) < 5:
+                                continue
+                                
+                            # Create document metadata
+                            _, ext = os.path.splitext(filename)
+                            metadata = DocumentMetadata(
+                                source=rel_path,
+                                chunk_id=1,
+                                chunk_size=len(content),
+                                total_chunks=1,
+                                file_extension=ext
+                            )
+                            
+                            # Create document
+                            doc = Document(content=content, metadata=metadata)
+                            
+                            # Embed the document
+                            embedded_doc = await self._embed_document(doc)
+                            if embedded_doc:
+                                self.documents.append(embedded_doc)
+                                loaded_files += 1
+                                self.logger.debug(f"Loaded document from {rel_path}")
+                            else:
+                                failed_files += 1
+                                log_warning(f"Failed to embed document from {rel_path}")
+                                
+                        except Exception as e:
+                            failed_files += 1
+                            log_error(f"Error loading file {file_path}: {str(e)}")
+            else:
+                # Original approach with complex chunking (not implemented here)
+                log_warning("Complex chunking not implemented, defaulting to file-based splitting")
+                return await self.load_docs_from_directory(directory, use_simple_file_splitting=True)
+
+            # Update stats
+            self.stats.total_documents = len(self.documents)
+            self.stats.loaded_files = loaded_files
+            self.stats.failed_files = failed_files
             
-            if not documents:
-                return False
-                
-            # Split text into chunks
-            text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=self.config.chunk_size,
-                chunk_overlap=self.config.chunk_overlap,
-                length_function=len,
-            )
-            chunks = text_splitter.split_documents(documents)
-            
-            # Create embeddings
-            embeddings = OllamaEmbeddings(
-                base_url=self.base_url,
-                model=self.embedding_model,
-            )
-            
-            # Create vector store
-            self.vector_store = FAISS.from_documents(
-                chunks, 
-                embeddings
-            )
-            
+            log_info(f"Loaded {loaded_files} files with {len(self.documents)} documents. Failed: {failed_files}")
             return True
             
         except Exception as e:
-            print(f"Error loading documents: {e}")
+            log_error(f"Error loading documents: {str(e)}", exc_info=True)
             return False
-            
-    def get_relevant_context(self, query: str) -> Optional[str]:
-        """Get relevant context for a query.
-        
-        Args:
-            query: Query to search for
-            
-        Returns:
-            str: Relevant context or None if no context found
-        """
-        if not self.vector_store:
-            return None
-            
+
+    async def _embed_document(self, doc: Document) -> Optional[EmbeddedDocument]:
+        """Embed a document using Ollama embedding API."""
         try:
-            docs = self.vector_store.similarity_search(
-                query, 
-                k=self.config.top_k_results
-            )
+            import aiohttp
             
-            if not docs:
+            # Prepare the request
+            url = f"{self.ollama_base_url}/api/embeddings"
+            payload = {
+                "model": "nomic-embed-text", # Good default embedding model
+                "prompt": doc.content
+            }
+            
+            # Make the request
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=payload) as response:
+                    response_json = await response.json()
+                    
+                    if response.status != 200:
+                        error = response_json.get("error", "Unknown error")
+                        log_error(f"Embedding API error: {error}")
+                        return None
+                        
+                    # Extract embedding
+                    embedding = response_json.get("embedding")
+                    if not embedding:
+                        log_error("No embedding returned")
+                        return None
+                        
+                    # Update stats
+                    self.stats.embedding_requests += 1
+                    
+                    # Create embedded document
+                    return EmbeddedDocument(
+                        content=doc.content,
+                        metadata=doc.metadata,
+                        embedding=embedding
+                    )
+                    
+        except Exception as e:
+            log_error(f"Error embedding document: {str(e)}", exc_info=True)
+            return None
+
+    async def get_relevant_context(self, query: str) -> Optional[RetrievalResult]:
+        """Get relevant context based on query."""
+        try:
+            if not self.documents:
+                log_warning("No documents loaded for search")
                 return None
                 
-            contexts = [doc.page_content for doc in docs]
-            return "\n\n".join(contexts)
+            # Embed the query
+            query_embedding = await self._get_query_embedding(query)
+            if not query_embedding:
+                log_error("Failed to embed query")
+                return None
+                
+            # Calculate similarity with each document
+            results = []
+            for doc in self.documents:
+                similarity = self._calculate_similarity(query_embedding, doc.embedding)
+                # Use the instance variable instead of accessing config directly
+                if similarity > self.similarity_threshold:
+                    # Add score to the document for debugging
+                    doc_copy = EmbeddedDocument(
+                        content=doc.content,
+                        metadata=doc.metadata,
+                        embedding=doc.embedding,
+                        score=similarity
+                    )
+                    results.append((doc_copy, similarity))
+                    
+            # Sort by similarity and take top N
+            results.sort(key=lambda x: x[1], reverse=True)
+            # Use the instance variable
+            results = results[:self.max_documents]
+            
+            # Update stats
+            self.stats.search_requests += 1
+            
+            # Create result
+            result_docs = []
+            for doc, score in results:
+                # Create a copy of the document without embedding
+                result_doc = Document(
+                    content=doc.content,
+                    metadata=doc.metadata
+                )
+                result_doc.metadata.source = doc.metadata.source  # Ensure source is copied
+                result_docs.append(result_doc)
+                self.logger.debug(f"Document {doc.metadata.source} score: {score}")
+                
+            return RetrievalResult(
+                documents=result_docs,
+                query=query
+            )
             
         except Exception as e:
-            print(f"Error retrieving context: {e}")
+            log_error(f"Error in get_relevant_context: {str(e)}", exc_info=True)
             return None
+
+    async def _get_query_embedding(self, query: str) -> Optional[List[float]]:
+        """Get embedding for a query."""
+        try:
+            import aiohttp
+            
+            # Prepare the request
+            url = f"{self.ollama_base_url}/api/embeddings"
+            payload = {
+                "model": self.embedding_model,  # Use instance variable
+                "prompt": query
+            }
+            
+            # Make the request
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=payload) as response:
+                    response_json = await response.json()
+                    
+                    if response.status != 200:
+                        error = response_json.get("error", "Unknown error")
+                        log_error(f"Embedding API error: {error}")
+                        return None
+                        
+                    # Extract embedding
+                    embedding = response_json.get("embedding")
+                    if not embedding:
+                        log_error("No embedding returned")
+                        return None
+                        
+                    # Update stats
+                    self.stats.embedding_requests += 1
+                    
+                    return embedding
+                    
+        except Exception as e:
+            log_error(f"Error getting query embedding: {str(e)}", exc_info=True)
+            return None
+
+    def _calculate_similarity(self, vec1: List[float], vec2: List[float]) -> float:
+        """Calculate cosine similarity between two vectors."""
+        try:
+            import numpy as np
+            
+            # Convert to numpy arrays
+            vec1 = np.array(vec1)
+            vec2 = np.array(vec2)
+            
+            # Calculate cosine similarity
+            dot_product = np.dot(vec1, vec2)
+            norm_a = np.linalg.norm(vec1)
+            norm_b = np.linalg.norm(vec2)
+            
+            if norm_a == 0 or norm_b == 0:
+                return 0
+                
+            return dot_product / (norm_a * norm_b)
+            
+        except Exception as e:
+            log_error(f"Error calculating similarity: {str(e)}", exc_info=True)
+            return 0

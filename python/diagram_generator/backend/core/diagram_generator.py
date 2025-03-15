@@ -9,6 +9,7 @@ from diagram_generator.backend.models.configs import DiagramGenerationOptions, D
 from diagram_generator.backend.services.ollama import OllamaService
 from diagram_generator.backend.utils.rag import RAGProvider
 from diagram_generator.backend.utils.diagram_validator import DiagramValidator, DiagramType
+from diagram_generator.backend.api.logs import log_info, log_error
 
 class DiagramGenerator:
     """Handles generation and validation of diagrams."""
@@ -35,11 +36,11 @@ Description: {description}
 """,
             "validate": """You are a {type} syntax validator. Check if the following diagram 
 code is valid and return a JSON response with format:
-{{
+{
     "valid": boolean,
     "errors": string[],
     "suggestions": string[]
-}}
+}
 
 Code to validate:
 {code}
@@ -73,7 +74,7 @@ Source diagram:
         if generation_options.agent.enabled:
             # Initialize RAG provider if needed
             if generation_options.rag.enabled and not self.rag_provider:
-                self._setup_rag_provider(generation_options.rag)
+                await self._setup_rag_provider(generation_options.rag)
                 
             # Generate diagram with agent
             return await self.diagram_agent.generate_diagram(
@@ -288,19 +289,36 @@ Source diagram:
                 
         return result
         
-    def _setup_rag_provider(self, rag_config: DiagramRAGConfig) -> None:
-        """Set up the RAG provider with configuration.
-        
-        Args:
-            rag_config: RAG configuration
-        """
-        # Only set up if there's a valid directory
-        if not rag_config.api_doc_dir or not os.path.isdir(rag_config.api_doc_dir):
+    async def _setup_rag_provider(self, rag_config):
+        """Set up RAG provider if enabled."""
+        if not rag_config or not rag_config.enabled:
+            log_info("RAG disabled, skipping setup")
+            self.rag_provider = None
             return
             
-        # Initialize RAG provider and load documents
-        self.rag_provider = RAGProvider(
-            config=rag_config,
-            ollama_base_url=self.llm_service.base_url
-        )
-        self.rag_provider.load_docs_from_directory()
+        try:
+            log_info("Setting up RAG provider")
+            self.rag_provider = RAGProvider(
+                config=rag_config,
+                ollama_base_url=self.llm_service.base_url  # Use base_url from llm_service instead
+            )
+            
+            if not rag_config.api_doc_dir:
+                log_info("RAG enabled but no API doc directory provided", 
+                         {"warning": "No API doc directory provided"})
+                return
+                
+            # Fix: Pass the directory parameter to load_docs_from_directory
+            # Also pass the use_simple_file_splitting parameter to use our improved method
+            await self.rag_provider.load_docs_from_directory(
+                directory=rag_config.api_doc_dir, 
+                use_simple_file_splitting=True
+            )
+            
+            # Log stats after loading
+            log_info(f"RAG provider stats", 
+                     {"stats": self.rag_provider.stats.model_dump()})
+            
+        except Exception as e:
+            log_error(f"Error setting up RAG provider: {str(e)}", exc_info=True)
+            self.rag_provider = None

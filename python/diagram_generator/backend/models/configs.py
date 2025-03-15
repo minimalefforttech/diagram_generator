@@ -41,12 +41,12 @@ class CircuitBreakerSettings(BaseModel):
         return v
 
 class DiagramRAGConfig(BaseModel):
-    """Configuration for the RAG system used in diagram generation."""
-    
+    """Configuration for RAG (Retrieval-Augmented Generation) in diagram generation."""
     enabled: bool = Field(False, description="Whether RAG is enabled")
-    api_doc_dir: Optional[str] = Field(
-        None, description="Directory containing API docs for knowledge retrieval"
-    )
+    api_doc_dir: Optional[str] = Field(None, description="Directory with API docs")
+    embedding_model: str = Field("nomic-embed-text", description="Embedding model to use")
+    max_documents: int = Field(5, description="Maximum documents to retrieve")
+    similarity_threshold: float = Field(0.2, description="Minimum similarity score")
     top_k_results: int = Field(5, description="Number of top results to retrieve")
     chunk_size: int = Field(1000, description="Size of text chunks")
     chunk_overlap: int = Field(200, description="Overlap between text chunks")

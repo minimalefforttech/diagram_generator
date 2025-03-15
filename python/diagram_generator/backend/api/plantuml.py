@@ -12,6 +12,8 @@ from fastapi import APIRouter, HTTPException, Body, Request
 from pydantic import BaseModel
 from typing import Optional
 
+from diagram_generator.backend.api.logs import log_info, log_error
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/plantuml", tags=["plantuml"])
 
@@ -64,7 +66,7 @@ def check_java_installation():
             "3. Set JAVA_HOME environment variable\n\n"
             "After installing, you may need to restart your application."
         )
-        logger.error(error_msg)
+        log_error(error_msg)
         raise HTTPException(
             status_code=500,
             detail=error_msg
@@ -78,12 +80,11 @@ def check_java_installation():
             text=True,
             shell=True  # Required for Windows
         )
-        logger.info(f"Found Java at: {java_path}")
-        logger.info(f"Java version: {result.stderr.strip()}")  # Java outputs version to stderr
+        log_info(f"Found Java installation", {"path": java_path, "version": result.stderr.strip()})
         return java_path
     except Exception as e:
         error_msg = f"Error verifying Java installation: {str(e)}"
-        logger.error(error_msg)
+        log_error(error_msg, exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=error_msg
@@ -97,9 +98,11 @@ async def render_plantuml(request: Request, plantuml_req: PlantUMLRequest = Body
     """
     try:
         # Log incoming request
-        logger.info(f"PlantUML render request received from {request.client.host}")
-        logger.info(f"Request format: {plantuml_req.format}")
-        logger.info(f"Code snippet (first 100 chars): {plantuml_req.code[:100]}...")
+        log_info(f"PlantUML render request received", {
+            "client_host": request.client.host,
+            "format": plantuml_req.format,
+            "code_preview": plantuml_req.code[:100] + "..."
+        })
         
         # Check Java installation first
         java_path = check_java_installation()
@@ -108,17 +111,17 @@ async def render_plantuml(request: Request, plantuml_req: PlantUMLRequest = Body
         project_root = Path(__file__).resolve().parents[4]  # Go up 4 levels
         plantuml_jar = project_root / "frontend" / "public" / "plantuml.jar"
         
-        logger.info(f"Looking for PlantUML JAR at: {plantuml_jar}")
+        log_info(f"Looking for PlantUML JAR", {"path": str(plantuml_jar)})
         
         if not plantuml_jar.exists():
             error_msg = f"PlantUML JAR file not found at {plantuml_jar}"
-            logger.error(error_msg)
+            log_error(error_msg)
             raise HTTPException(
                 status_code=500, 
                 detail=error_msg
             )
         
-        logger.info(f"PlantUML JAR found at {plantuml_jar}")
+        log_info(f"PlantUML JAR found", {"path": str(plantuml_jar)})
         
         # Create a temporary directory for the input and output files
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -138,7 +141,7 @@ async def render_plantuml(request: Request, plantuml_req: PlantUMLRequest = Body
                 str(input_file)  # Input file
             ]
             
-            logger.info(f"Running PlantUML command: {' '.join(cmd)}")
+            log_info(f"Running PlantUML command", {"command": ' '.join(cmd)})
             
             try:
                 # Run PlantUML jar with subprocess.run (synchronous)
@@ -151,11 +154,11 @@ async def render_plantuml(request: Request, plantuml_req: PlantUMLRequest = Body
                 )
                 
                 if result.stdout:
-                    logger.info(f"PlantUML stdout: {result.stdout}")
+                    log_info(f"PlantUML stdout", {"output": result.stdout})
                 
             except subprocess.CalledProcessError as e:
                 error_msg = e.stderr if e.stderr else str(e)
-                logger.error(f"PlantUML rendering error: {error_msg}")
+                log_error(f"PlantUML rendering error: {error_msg}")
                 raise HTTPException(
                     status_code=400,
                     detail=f"PlantUML rendering failed: {error_msg}"
@@ -169,13 +172,13 @@ async def render_plantuml(request: Request, plantuml_req: PlantUMLRequest = Body
             if not output_file.exists():
                 # List all files in temp directory for debugging
                 all_files = list(Path(temp_dir).glob('*'))
-                logger.error(f"PlantUML output file not found. Files in temp dir: {all_files}")
+                log_error(f"PlantUML output file not found", {"files_in_temp": [str(f) for f in all_files]})
                 raise HTTPException(
                     status_code=500,
                     detail="PlantUML output file not found"
                 )
             
-            logger.info(f"Found output file at {output_file}")
+            log_info(f"Found output file", {"path": str(output_file)})
             
             # Read and encode the generated image
             with open(output_file, "rb") as f:
@@ -185,7 +188,7 @@ async def render_plantuml(request: Request, plantuml_req: PlantUMLRequest = Body
             base64_data = base64.b64encode(image_data).decode("utf-8")
             content_type = "image/png" if plantuml_req.format == "png" else "image/svg+xml"
             
-            logger.info(f"Successfully encoded {len(image_data)} bytes as base64")
+            log_info(f"Successfully encoded image as base64", {"bytes": len(image_data)})
             
             return {
                 "image": f"data:{content_type};base64,{base64_data}",
@@ -196,7 +199,7 @@ async def render_plantuml(request: Request, plantuml_req: PlantUMLRequest = Body
         raise  # Re-raise HTTP exceptions as is
     except Exception as e:
         error_msg = f"Error rendering PlantUML diagram: {str(e)}"
-        logger.exception(error_msg)
+        log_error(error_msg, exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=error_msg

@@ -7,6 +7,7 @@ import re
 from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional, Set, Tuple, Any, Union
+import os  # Add import for file operations
 
 from pydantic import BaseModel, Field, ConfigDict, model_validator
 
@@ -14,7 +15,7 @@ from diagram_generator.backend.models.configs import AgentConfig, DiagramGenerat
 from diagram_generator.backend.models.ollama import OllamaAPI, ErrorResponse
 from diagram_generator.backend.storage.database import Storage, DiagramRecord, ConversationRecord, ConversationMessage
 from diagram_generator.backend.utils.rag import RAGProvider
-from diagram_generator.backend.api.logs import log_error, log_llm
+from diagram_generator.backend.api.logs import log_error, log_llm, log_info
 from diagram_generator.backend.utils.diagram_validator import DiagramValidator, ValidationResult, DiagramType
 
 logger = logging.getLogger(__name__)
@@ -60,23 +61,28 @@ class DiagramAgent:
     """Agent responsible for generating and refining diagram code using tool-based approach."""
 
     PROMPT_TEMPLATES = {
-        "generate": """Task: Create a {diagram_type} diagram.
+        "generate": """Task: Create a {diagram_type} diagram based on the provided code context.
 
 Description: {description}
 
+CODE CONTEXT (IMPORTANT - USE THIS TO CREATE YOUR DIAGRAM):
 {context_section}
 
 Rules:
 1. Output ONLY valid {diagram_type} diagram code in {syntax_type} syntax
 2. Keep the diagram type exactly as specified ({diagram_type})
 {example_section}
-3. Preserve indentation and structure exactly
-4. Do not convert to a different diagram type
-5. No explanations, markdown formatting, or backticks
+3. Your diagram MUST accurately represent the provided code context
+4. Include all important classes, methods, and relationships from the context
+5. Preserve indentation and structure exactly
+6. Do not convert to a different diagram type
+7. No explanations, markdown formatting, or backticks
 {syntax_rules}
 
-CRITICAL: Your response must be ONLY valid {diagram_type} code in the exact format shown above.
-DO NOT convert mindmap to flowchart or change the diagram type in any way.
+CRITICAL: 
+- USE THE CODE CONTEXT to create an accurate diagram of the system
+- Your response must be ONLY valid {diagram_type} code in the exact format shown above
+- DO NOT convert mindmap to flowchart or change the diagram type in any way
 """,
         "fix": """Task: Fix errors in {diagram_type} diagram while preserving exact type and structure.
 
@@ -110,25 +116,15 @@ Preserve the exact structure while only fixing the validation errors."""
         self.storage = storage or Storage()
         self.ollama = OllamaAPI(base_url=base_url)
         self.logger = logging.getLogger(__name__)
-        
-    def _determine_requirements(
+
+    async def _determine_requirements(
         self, 
         description: str, 
         diagram_type: DiagramType,
         rag_directory: Optional[str] = None,
         existing_diagram: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Analyze prompt and determine diagram requirements.
-        
-        Args:
-            description: User's diagram description
-            diagram_type: Type of diagram to generate (mermaid/plantuml)
-            rag_directory: Optional directory path for RAG context
-            existing_diagram: Optional existing diagram code to incorporate
-            
-        Returns:
-            Dictionary containing determined requirements and context
-        """
+        """Analyze prompt and determine diagram requirements."""
         requirements = {
             "description": description,
             "diagram_type": diagram_type,
@@ -139,19 +135,109 @@ Preserve the exact structure while only fixing the validation errors."""
         # Load RAG context if directory provided
         if rag_directory:
             try:
+                log_info(f"Setting up RAG with directory: {rag_directory}")
+                rag_config = DiagramGenerationOptions().rag
+                rag_config.api_doc_dir = rag_directory
+                rag_config.enabled = True
+                
+                # Ensure RAG config has necessary attributes
+                if not hasattr(rag_config, 'similarity_threshold'):
+                    log_info("Adding default similarity_threshold to RAG config")
+                    # Don't modify the config object directly, we'll let RAGProvider handle defaults
+                    
                 rag_provider = RAGProvider(
-                    config=DiagramGenerationOptions().rag,
+                    config=rag_config,
                     ollama_base_url=self.ollama.base_url
                 )
-                if rag_provider.load_docs_from_directory(rag_directory):
-                    context = rag_provider.get_relevant_context(description)
-                    if context:
-                        requirements["rag_context"] = context
+                
+                # Get relevant context from code (modified to support async call)
+                success = await rag_provider.load_docs_from_directory(rag_directory, use_simple_file_splitting=True)
+                
+                if success:
+                    log_info(f"RAG Provider Stats: {rag_provider.stats.model_dump_json(indent=2)}")
+                    # Enhance query with diagram specific terms to improve context retrieval
+                    enhanced_query = self._enhance_query_for_diagram(description, diagram_type)
+                    log_info(f"Enhanced RAG query: {enhanced_query}")
+                    
+                    # Get file overview to help with context
+                    file_overview = self._get_directory_overview(rag_directory)
+                    if file_overview:
+                        log_info("Including directory structure overview in RAG context")
+                        enhanced_query += "\n\nAvailable files:\n" + file_overview
+                    
+                    search_result = await rag_provider.get_relevant_context(enhanced_query)
+                    if search_result and search_result.documents:
+                        log_info(
+                            f"Found {len(search_result.documents)} relevant documents for query"
+                        )
+                        context_parts = []
+                        for i, doc in enumerate(search_result.documents):
+                            # Check if this is an EmbeddedDocument with score
+                            if hasattr(doc, 'score'):
+                                log_info(f"Document {i+1} relevance score: {doc.score}")
+                            else:
+                                # If it's just a regular Document without score, don't try to log the score
+                                log_info(f"Document {i+1} from {doc.metadata.source}")
+                            context_parts.append(f"--- {doc.metadata.source} ---\n{doc.content}")
+                        
+                        context_text = "\n\n".join(context_parts)
+                        requirements["rag_context"] = context_text
                         requirements["rag_provider"] = rag_provider
+                        
+                        # Log the first part of the context to verify content
+                        preview = context_text[:500] + "..." if len(context_text) > 500 else context_text
+                        log_info(f"RAG context preview: {preview}")
+                    else:
+                        self.logger.warning("No relevant context found in documents")
+                else:
+                    self.logger.error("Failed to load documents for RAG")
             except Exception as e:
-                self.logger.error(f"Error loading RAG context: {str(e)}")
+                self.logger.error(f"Error setting up RAG: {str(e)}", exc_info=True)
                 
         return requirements
+    
+    def _get_directory_overview(self, directory: str) -> str:
+        """Get a simple overview of the directory structure to provide additional context."""
+        try:
+            file_paths = []
+            for root, _, files in os.walk(directory):
+                for file in files:
+                    # Only include code files
+                    if file.endswith(('.py', '.js', '.ts', '.jsx', '.tsx', '.html', '.css', 
+                                     '.java', '.c', '.cpp', '.cs', '.go', '.rs', '.php')):
+                        rel_path = os.path.relpath(os.path.join(root, file), directory)
+                        file_paths.append(rel_path)
+            
+            # Sort and return as a simple list
+            file_paths.sort()
+            return "\n".join(file_paths[:50])  # Limit to 50 files to avoid overwhelming
+        except Exception as e:
+            self.logger.error(f"Error getting directory overview: {str(e)}")
+            return ""
+
+    def _enhance_query_for_diagram(self, description: str, diagram_type: DiagramType) -> str:
+        """Enhance the search query with diagram-specific terms to improve context retrieval."""
+        diagram_type_str = diagram_type.value
+        
+        # Add diagram-specific search terms based on the type
+        if diagram_type == DiagramType.MERMAID:
+            specific_type = self._detect_diagram_type(description)
+            
+            if specific_type == 'class':
+                return f"{description} class definition interface extends implements"
+            elif specific_type == 'flowchart':
+                return f"{description} function process workflow steps"
+            elif specific_type == 'sequence':
+                return f"{description} function calls API endpoints interactions"
+            elif specific_type == 'er':
+                return f"{description} database schema entity model relationship"
+            elif specific_type == 'component':
+                return f"{description} component module service architecture"
+            else:
+                return f"{description} structure diagram {specific_type}"
+        else:
+            # PlantUML specific enhancements
+            return f"{description} UML class definition interface relationship"
         
     def _strip_comments(self, code: str) -> str:
         """Remove comments and markdown formatting without affecting diagram structure."""
@@ -201,7 +287,7 @@ Preserve the exact structure while only fixing the validation errors."""
 
     def _get_syntax_rules(self, syntax_type: str) -> str:
         """Get syntax-specific rules based on the diagram type."""
-        if syntax_type.lower() == 'mermaid':
+        if (syntax_type.lower() == 'mermaid'):
             return """5. Additional Rules for Mermaid:
    - Use proper node and edge syntax
    - Apply styles with style statements
@@ -272,26 +358,54 @@ Example of a valid {specific_type} diagram in {syntax_type}:
 Additional rule: Follow the structure shown in the example above.
 """
 
+        # Format context section appropriately
+        formatted_context = ""
+        if context_section:
+            formatted_context = context_section
+            
+            # Log that we're using RAG context
+            log_info(f"Using RAG context of {len(formatted_context)} characters for diagram generation")
+        else:
+            # If no context available, adjust prompt to work without it
+            log_info("No RAG context available, generating diagram based on description only")
+            formatted_context = "No code context provided. Create diagram based on description only."
+
         prompt = self.PROMPT_TEMPLATES["generate"].format(
             description=description,
             diagram_type=specific_type,
             syntax_type=syntax_type,
-            context_section=context_section,
+            context_section=formatted_context,
             example_section=example_section,
             syntax_rules=syntax_rules
         )
 
         model = agent_config.model_name if agent_config and agent_config.enabled else self.default_model
         temperature = agent_config.temperature if agent_config and agent_config.enabled else 0.2
-        system = agent_config.system_prompt if agent_config and agent_config.enabled else None
+        
+        # Use a special system prompt that emphasizes using the code context
+        context_system_prompt = """You are a diagram generation expert. Your task is to:
+1. CAREFULLY ANALYZE the provided code context
+2. CREATE an accurate diagram that represents the code structure and relationships
+3. Include ALL important components from the provided context
+4. Return ONLY the diagram code with no additional text or explanation
+
+The code context contains the actual implementation that your diagram should accurately represent."""
+
+        system = context_system_prompt if context_section else (
+            agent_config.system_prompt if agent_config and agent_config.enabled else None
+        )
 
         try:
             log_llm("Starting LLM generation", {
                 "model": model,
-                "prompt": prompt,
+                "prompt_length": len(prompt),
+                "context_length": len(formatted_context),
                 "temperature": temperature,
-                "system": system
+                "has_system_prompt": system is not None
             })
+            
+            # TODO: If context is very large, consider chunking it or using a different approach
+            
             result = await self.ollama.generate(
                 model=model,
                 prompt=prompt,
@@ -364,7 +478,7 @@ Additional rule: Follow the structure shown in the example above.
                 
         # Method 2: Check for diagram code without backticks
         def is_valid_diagram_starter(line: str) -> bool:
-            """Check if a line is a valid diagram starter."""
+            """Check if a line is a valid diagram starter.""" 
             line = line.lower().strip()
             # Mermaid starters
             if any(line.startswith(starter) for starter in [
@@ -514,7 +628,7 @@ Additional rule: Follow the structure shown in the example above.
         if not options:
             options = DiagramGenerationOptions()
 
-        self.logger.info(f"Generating {diagram_type} diagram for: {description}")
+        log_info(f"Generating {diagram_type} diagram for: {description}")
 
         # Extract RAG directory from options
         rag_directory = options.rag.api_doc_dir if options.rag and options.rag.enabled else None
@@ -545,7 +659,7 @@ Additional rule: Follow the structure shown in the example above.
 
         # Step 1: Determine requirements
         state.current_activity = "Analyzing Requirements"
-        requirements = self._determine_requirements(
+        requirements = await self._determine_requirements(
             state.description,
             state.diagram_type,
             rag_directory=rag_directory
@@ -553,6 +667,9 @@ Additional rule: Follow the structure shown in the example above.
         state.requirements = requirements
         state.rag_provider = requirements.get("rag_provider")
         state.context_section = requirements.get("rag_context", "")
+        
+        if state.context_section:
+            state.notes.append(f"Found relevant code context ({len(state.context_section)} characters)")
 
         # Step 2: Generate initial diagram
         state.current_activity = "Generating Diagram"
