@@ -2,6 +2,18 @@
 
 A tool for generating diagrams using LLM, with a Python backend API and React frontend.
 
+![Creating a new diagram](docs/screenshots/create_new_diagram.png)
+![Generated Diagram](docs/screenshots/generated_diagram.png)
+![Editor Panel](docs/screenshots/editor_panel.png)
+![Output Log](docs/screenshots/output_log.png)
+
+## Disclaimer
+
+This project was an experiment in semi-autonomous and autonomous development for learning purposes, I take no responsibility of the code.
+
+This tool may is not well tested or built for that matter.
+
+
 ## Project Structure
 
 ```
@@ -41,6 +53,12 @@ diagram_generator/
    ```bash
    pip install -e ".[dev]"
    ```
+
+Alternatively run:
+```bash
+python run.py
+```  
+Which is a quick workaround for not having to deal with pip during development 
 
 ## Running the Application
 
