@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-900;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded font-semibold transition-colors;
+  }
+  
+  .btn-primary {
+    @apply bg-primary-600 text-white hover:bg-primary-700;
+  }
+  
+  .btn-secondary {
+    @apply bg-gray-200 text-gray-800 hover:bg-gray-300;
+  }
+  
+  .input {
+    @apply px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500;
+  }
+  
+  .card {
+    @apply bg-white rounded-lg shadow p-6;
+  }
+}
+
+/* Diagram Editor Styles */
+.diagram-editor {
+  @apply font-mono bg-gray-800 text-gray-100 p-4 rounded-lg;
+  min-height: 200px;
+}
+
+/* Mermaid Diagram Styles */
+.mermaid {
+  @apply bg-white p-4 rounded-lg shadow;
+}
+
+/* Loading States */
+.loading {
+  @apply animate-pulse bg-gray-200;
+}
+
+/* Error States */
+.error-message {
+  @apply text-red-600 bg-red-50 p-4 rounded-lg border border-red-200;
+}
+
+/* Success States */
+.success-message {
+  @apply text-green-600 bg-green-50 p-4 rounded-lg border border-green-200;
+}
