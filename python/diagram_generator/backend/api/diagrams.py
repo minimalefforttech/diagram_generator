@@ -4,14 +4,23 @@ import os
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 import uuid
+import logging
+import traceback
 
 from fastapi import APIRouter, Body, HTTPException, Query
 from pydantic import BaseModel
 
+from diagram_generator.backend.utils.diagram_validator import DiagramValidator, ValidationResult, DiagramType, DiagramSubType
 from diagram_generator.backend.core.diagram_generator import DiagramGenerator
-from diagram_generator.backend.models.configs import DiagramGenerationOptions, DiagramRAGConfig
+from diagram_generator.backend.models.configs import DiagramGenerationOptions
 from diagram_generator.backend.services.ollama import OllamaService
-from diagram_generator.backend.storage.database import Storage, ConversationRecord, ConversationMessage
+from .logs import log_llm, log_error
+
+from diagram_generator.backend.storage.database import Storage, ConversationRecord, ConversationMessage, DiagramRecord
+# Initialize services
+ollama_service = OllamaService()
+diagram_generator = DiagramGenerator(llm_service=ollama_service)
+storage = Storage()
 
 class ConversationCreateRequest(BaseModel):
     """Request model for creating a new conversation."""
@@ -31,230 +40,426 @@ class ContinueConversationRequest(BaseModel):
     """Request model for continuing a conversation."""
     message: str
 
+class DiagramHistoryItem(BaseModel):
+    """Model for diagram history item."""
+    id: str
+    description: Optional[str] = None  # Optional user-provided description
+    prompt: str  # Original prompt used to generate diagram
+    syntax: str
+    createdAt: str
+    iterations: Optional[int] = None
+
+class DiagramResponse(BaseModel):
+    """Response model for a diagram."""
+    id: str
+    code: str
+    type: str
+    subtype: Optional[str] = None
+    description: Optional[str] = None  # Optional user-provided description
+    prompt: str  # Original prompt used to generate diagram
+    createdAt: str
+    metadata: Optional[Dict[str, Any]] = None
+    notes: Optional[List[str]] = None
+
 router = APIRouter(prefix="/diagrams", tags=["diagrams"])
-ollama_service = OllamaService()
-diagram_generator = DiagramGenerator(ollama_service)
-storage = Storage()
 
-def _conversation_to_response(conversation: ConversationRecord) -> ConversationResponse:
-    """Convert ConversationRecord to ConversationResponse."""
-    return ConversationResponse(
-        id=conversation.id,
-        diagram_id=conversation.diagram_id,
-        messages=[{
-            "role": m.role,
-            "content": m.content,
-            "timestamp": m.timestamp.isoformat(),
-            "metadata": m.metadata
-        } for m in conversation.messages],
-        created_at=conversation.created_at.isoformat(),
-        updated_at=conversation.updated_at.isoformat(),
-        metadata=conversation.metadata
-    )
-
-@router.post("/conversations")
-async def create_conversation(request: ConversationCreateRequest) -> ConversationResponse:
-    """Create a new conversation."""
-    try:
-        conversation_id = str(uuid.uuid4())
-        conversation = ConversationRecord(
-            id=conversation_id,
-            diagram_id=request.diagram_id,
-            messages=[ConversationMessage(role="user", content=request.message, timestamp=datetime.now())],
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
-            metadata={}
-        )
-        storage.save_conversation(conversation)
-        return _conversation_to_response(conversation)
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to create conversation: {str(e)}"
-        )
-
-@router.get("/conversations/{conversation_id}")
-async def get_conversation(conversation_id: str) -> ConversationResponse:
-    """Retrieve a conversation by ID."""
-    try:
-        conversation = storage.get_conversation(conversation_id)
-        if conversation is None:
-            raise HTTPException(status_code=404, detail="Conversation not found")
-        return _conversation_to_response(conversation)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to retrieve conversation: {str(e)}"
-        )
-
-@router.delete("/conversations/{conversation_id}")
-async def delete_conversation(conversation_id: str) -> Dict:
-    """Delete a conversation by ID."""
-    try:
-        result = storage.delete_conversation(conversation_id)
-        if result is False:
-            raise HTTPException(status_code=404, detail="Conversation not found")
-        return {"message": f"Conversation {conversation_id} deleted"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to delete conversation: {str(e)}"
-        )
-
-@router.get("/conversations")
-async def list_conversations(diagram_id: str) -> List[ConversationResponse]:
-    """List conversations for a diagram."""
-    try:
-        conversations = storage.list_conversations(diagram_id)
-        return [_conversation_to_response(conv) for conv in conversations]
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to list conversations: {str(e)}"
-        )
-
-@router.post("/conversations/{conversation_id}/continue")
-async def continue_conversation(
-    conversation_id: str,
-    request: ContinueConversationRequest
-) -> ConversationResponse:
-    """Continue an existing conversation."""
-    try:
-        # Get existing conversation
-        conversation = storage.get_conversation(conversation_id)
-        if not conversation:
-            raise HTTPException(status_code=404, detail="Conversation not found")
-
-        # Add new message
-        conversation.messages.append(
-            ConversationMessage(
-                role="user",
-                content=request.message,
-                timestamp=datetime.now(),
-                metadata={}
-            )
-        )
-        conversation.updated_at = datetime.now()
-
-        # Save updated conversation
-        storage.update_conversation(conversation)
-        return _conversation_to_response(conversation)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to continue conversation: {str(e)}"
-        )
+class GenerateDiagramRequest(BaseModel):
+    """Request model for generating a diagram."""
+    description: Optional[str] = None  # Optional user-provided description
+    prompt: str  # The diagram prompt/description
+    syntax_type: Optional[str] = "mermaid"  # High level syntax type (mermaid, plantuml)
+    subtype: Optional[str] = "auto"  # Specific diagram type (flowchart, sequence, etc)
+    model: Optional[str] = None
+    options: Optional[Dict] = None
 
 @router.post("/generate")
-async def generate_diagram(
-    description: str,
-    diagram_type: str = "mermaid",
-    options: Optional[Dict] = None,
-    use_agent: bool = Query(True, description="Use the agentic system for generation and validation"),
-    max_iterations: int = Query(3, description="Maximum iterations for fix attempts"),
-    api_docs_dir: Optional[str] = Query(None, description="Directory containing API documentation for RAG")
-) -> Dict:
+async def generate_diagram(request: GenerateDiagramRequest) -> Dict:
     """Generate a diagram from a text description."""
     try:
+        # Convert input types to proper enums using their from_string methods
+        diagram_type = DiagramType.from_string(request.syntax_type or "mermaid")
+        diagram_subtype = DiagramSubType.from_string(request.subtype or "auto")
+        
+        if not diagram_type:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid syntax type: {request.syntax_type}. Must be one of: {[t.value for t in DiagramType]}"
+            )
+            
         # Prepare generation options
-        generation_options = options or {}
+        generation_options = request.options or {}
         
-        # Configure agent options
+        # Log model being used
+        log_llm("Selected model", {
+            "model": request.model or ollama_service.model
+        })
+        
+        # Set model if provided
+        if request.model:
+            generation_options["model"] = request.model
+
+        # Configure agent options if not provided
         if "agent" not in generation_options:
-            generation_options["agent"] = {}
-        generation_options["agent"]["enabled"] = use_agent
-        generation_options["agent"]["max_iterations"] = max_iterations
+            generation_options["agent"] = {
+                "enabled": True,
+                "max_iterations": 3
+            }
         
-        # Configure RAG if a directory is provided
-        if api_docs_dir:
-            if os.path.isdir(api_docs_dir):
-                if "rag" not in generation_options:
-                    generation_options["rag"] = {}
-                generation_options["rag"]["enabled"] = True
-                generation_options["rag"]["api_doc_dir"] = api_docs_dir
-            else:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"API docs directory not found: {api_docs_dir}"
-                )
+        # Configure RAG if enabled in options
+        if generation_options.get("rag", {}).get("enabled", False):
+            api_docs_dir = generation_options["rag"].get("api_doc_dir")
+            if api_docs_dir and not os.path.isdir(api_docs_dir):
+                error_msg = f"API docs directory not found: {api_docs_dir}"
+                log_error(error_msg)
+                raise HTTPException(status_code=400, detail=error_msg)
+
+        # Log the generation request
+        log_llm("Generating diagram", {
+            "description": request.description,
+            "prompt": request.prompt,
+            "type": diagram_type.value,
+            "subtype": diagram_subtype.value,
+            "model": request.model or ollama_service.model,
+            "options": generation_options
+        })
+
+        # Add subtype to prompt if not auto
+        prompt = request.prompt
+        if diagram_subtype != DiagramSubType.AUTO:
+            prompt = f"Create a {diagram_subtype.value} diagram: {prompt}"
+
+        # Generate the diagram and get agent output
+        result = await diagram_generator.generate_diagram(
+            description=prompt,
+            diagram_type=diagram_type.value,
+            options=generation_options
+        )
+
+        # Log success/failure
+        if result.code and result.valid:
+            # Create and save the diagram record if generation was successful
+            diagram = DiagramRecord(
+                id=result.diagram_id,
+                description=request.description or request.prompt,
+                diagram_type=diagram_type.value,
+                code=result.code,
+                created_at=datetime.now(),
+                metadata={
+                    "description": request.description,
+                    "prompt": request.prompt,
+                    "iterations": result.iterations,
+                    "valid": result.valid
+                }
+            )
+            storage.save_diagram(diagram)
+
+            log_llm("Generation successful", {
+                "diagram_type": diagram_type.value,
+                "code": result.code,
+                "notes": result.notes,
+                "iterations": result.iterations,
+                "diagram_id": result.diagram_id,
+                "conversation_id": result.conversation_id
+            })
+        else:
+            log_error("Failed to generate valid diagram", {
+                "diagram_type": diagram_type.value,
+                "code": result.code,
+                "notes": result.notes,
+                "iterations": result.iterations,
+                "valid": result.valid
+            })
         
-        # Generate the diagram
-        code, notes = await diagram_generator.generate_diagram(
-            description=description,
-            diagram_type=diagram_type,
+        return {
+            "code": result.code,
+            "type": diagram_type.value,
+            "subtype": diagram_subtype.value,
+            "description": request.description,
+            "prompt": request.prompt,
+            "notes": result.notes,
+            "iterations": result.iterations,
+            "valid": result.valid,
+            "diagram_id": result.diagram_id,
+            "conversation_id": result.conversation_id
+        }
+
+    except Exception as e:
+        error_msg = f"Failed to generate diagram: {str(e)}"
+        log_error(error_msg, {
+            "error": str(e),
+            "description": request.description,
+            "prompt": request.prompt,
+            "diagram_type": request.syntax_type,
+            "options": generation_options
+        })
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=error_msg
+        )
+
+@router.get("/syntax-types")
+async def get_syntax_types() -> Dict[str, Any]:
+    """Get available diagram syntax types and their subtypes."""
+    try:
+        # Get available types from enum
+        syntax_types = DiagramType.to_list()
+        types = {}
+        
+        # Get subtypes for each syntax type
+        for syntax in syntax_types:
+            syntax_enum = DiagramType.from_string(syntax)
+            if syntax_enum:
+                subtypes = [t.value.replace('plantuml_', '') for t in DiagramSubType.for_syntax(syntax_enum)]
+                types[syntax] = subtypes
+        
+        return {
+            "syntax": syntax_types,
+            "types": types
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get syntax types: {str(e)}"
+        )
+
+@router.get("/history")
+async def get_diagram_history() -> List[DiagramHistoryItem]:
+    """Get the history of all generated diagrams."""
+    try:
+        diagrams = storage.get_all_diagrams()
+        
+        # Convert to response model
+        history_items = []
+        for diagram in diagrams:
+            # Get iterations from metadata if available
+            iterations = diagram.metadata.get("iterations", 0) if diagram.metadata else 0
+            
+            # Get description and prompt from metadata or fallback to description field
+            metadata = diagram.metadata or {}
+            description = metadata.get("description")
+            prompt = metadata.get("prompt", diagram.description)
+            
+            history_items.append(DiagramHistoryItem(
+                id=diagram.id,
+                description=description,
+                prompt=prompt[:100] + ("..." if len(prompt) > 100 else ""),
+                syntax=diagram.diagram_type,
+                createdAt=diagram.created_at.isoformat(),
+                iterations=iterations
+            ))
+            
+        # Sort by creation date (most recent first)
+        history_items.sort(key=lambda x: x.createdAt, reverse=True)
+        
+        return history_items
+    except Exception as e:
+        error_msg = f"Failed to get diagram history: {str(e)}"
+        log_error(error_msg)
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=error_msg
+        )
+
+@router.get("/diagram/{diagram_id}/iterations")
+async def get_diagram_iterations(diagram_id: str) -> int:
+    """Get the number of iterations for a diagram."""
+    try:
+        diagram = storage.get_diagram(diagram_id)
+        
+        if not diagram:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Diagram with ID {diagram_id} not found"
+            )
+            
+        # Get iterations from metadata if available
+        metadata = diagram.metadata or {}
+        iterations = metadata.get("iterations", 0)
+            
+        return iterations
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = f"Failed to get diagram iterations: {str(e)}"
+        log_error(error_msg)
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=error_msg
+        )
+
+@router.post("/diagram/{diagram_id}/update")
+async def update_diagram(
+    diagram_id: str,
+    request: GenerateDiagramRequest
+) -> DiagramResponse:
+    """Update an existing diagram."""
+    try:
+        diagram = storage.get_diagram(diagram_id)
+        
+        if not diagram:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Diagram with ID {diagram_id} not found"
+            )
+
+        # Convert input types to proper enums
+        diagram_type = DiagramType.from_string(request.syntax_type or diagram.diagram_type)
+        diagram_subtype = DiagramSubType.from_string(request.subtype or "auto")
+        
+        # Prepare generation options
+        generation_options = request.options or {}
+        if request.model:
+            generation_options["model"] = request.model
+
+        # Configure agent options if not provided
+        if "agent" not in generation_options:
+            generation_options["agent"] = {
+                "enabled": True,
+                "max_iterations": 3
+            }
+
+        # Use the update_diagram method instead of generate_diagram
+        result = await diagram_generator.update_diagram(
+            diagram_code=diagram.code,
+            update_notes=request.prompt,
+            diagram_type=diagram_type.value,
             options=generation_options
         )
         
-        # Clean up the diagram code
-        cleaned_code = code.strip()
-        if "```mermaid" in cleaned_code:
-            try:
-                cleaned_code = cleaned_code.split("```mermaid")[1].split("```")[0].strip()
-            except IndexError:
-                pass
+        # Update the diagram and save it back with metadata
+        diagram.code = result.code
+        diagram.description = request.prompt
+        diagram.metadata = {
+            **(diagram.metadata or {}),
+            "description": request.description,
+            "prompt": request.prompt,
+            "iterations": result.iterations,
+            "valid": result.valid
+        }
+        storage.save_diagram(diagram)
+
+        return DiagramResponse(
+            id=diagram.id,
+            code=result.code,
+            type=diagram_type.value,
+            description=request.description,
+            prompt=request.prompt,
+            createdAt=diagram.created_at.isoformat(),
+            metadata=diagram.metadata,
+            notes=result.notes
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = f"Failed to update diagram: {str(e)}"
+        log_error(error_msg)
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=error_msg
+        )
+
+@router.get("/diagram/{diagram_id}")
+async def get_diagram_by_id(diagram_id: str) -> DiagramResponse:
+    """Get diagram by ID."""
+    try:
+        diagram = storage.get_diagram(diagram_id)
         
-        # Normalize the code
-        if "\n" in cleaned_code:
-            lines = cleaned_code.splitlines()
-            min_indent = float('inf')
-            for line in lines:
-                if line.strip():
-                    min_indent = min(min_indent, len(line) - len(line.lstrip()))
-            min_indent = 0 if min_indent == float('inf') else min_indent
-            cleaned_code = "\n".join(line[min_indent:].rstrip() for line in lines)
+        if not diagram:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Diagram with ID {diagram_id} not found"
+            )
             
-        return {
-            "diagram": cleaned_code,
-            "type": diagram_type,
-            "notes": [note for note in notes if note != "Failed to parse JSON response"]
-        }
+        # Get metadata
+        metadata = diagram.metadata or {}
+        description = metadata.get("description")
+        prompt = metadata.get("prompt", diagram.description)
+        
+        return DiagramResponse(
+            id=diagram.id,
+            code=diagram.code,
+            type=diagram.diagram_type,
+            description=description,
+            prompt=prompt,
+            createdAt=diagram.created_at.isoformat(),
+            metadata=metadata,
+            notes=[]  # Could populate from conversation records if needed
+        )
+    except HTTPException:
+        raise
     except Exception as e:
+        error_msg = f"Failed to get diagram: {str(e)}"
+        log_error(error_msg)
+        traceback.print_exc()
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to generate diagram: {str(e)}"
+            detail=error_msg
         )
 
-@router.post("/validate")
-async def validate_diagram(
-    code: str,
-    diagram_type: str = "mermaid"
-) -> Dict:
-    """Validate diagram syntax."""
+@router.delete("/diagram/{diagram_id}")
+async def delete_diagram(diagram_id: str) -> Dict[str, str]:
+    """Delete a specific diagram by ID."""
     try:
-        return await diagram_generator.validate_diagram(code, diagram_type)
+        diagram = storage.get_diagram(diagram_id)
+        
+        if not diagram:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Diagram with ID {diagram_id} not found"
+            )
+            
+        storage.delete_diagram(diagram_id)
+        return {"status": "success", "message": f"Diagram {diagram_id} deleted successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
+        error_msg = f"Failed to delete diagram: {str(e)}"
+        log_error(error_msg)
+        traceback.print_exc()
         raise HTTPException(
             status_code=500,
-            detail=f"Validation failed: {str(e)}"
+            detail=error_msg
         )
 
-@router.post("/convert")
-async def convert_diagram(
-    diagram: str,
-    source_type: str = Query(..., description="Source diagram type"),
-    target_type: str = Query(..., description="Target diagram type")
-) -> Dict:
-    """Convert diagram between different formats."""
+@router.delete("/clear")
+async def clear_history() -> Dict[str, str]:
+    """Clear all diagram history."""
     try:
-        code, notes = await diagram_generator.convert_diagram(
-            diagram=diagram,
-            source_type=source_type,
-            target_type=target_type
-        )
+        # Log the clear request
+        log_llm("Clearing all diagram history")
+        
+        # Get initial count to report how many were deleted
+        initial_count = len(storage.get_all_diagrams())
+        
+        # Clear all diagrams
+        storage.clear_diagrams()
+        
+        # Log success
+        log_llm("Successfully cleared diagram history", {"deleted_count": initial_count})
+        
         return {
-            "diagram": code,
-            "source_type": source_type,
-            "target_type": target_type,
-            "notes": notes
+            "status": "success", 
+            "message": f"All diagrams deleted successfully ({initial_count} diagrams)",
+            "state": {
+                "diagrams_deleted": initial_count,
+                "success": True
+            }
         }
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Conversion failed: {str(e)}"
-        )
+        error_msg = f"Failed to clear diagram history: {str(e)}"
+        log_error(error_msg)
+        traceback.print_exc()
+        
+        return {
+            "status": "error",
+            "message": error_msg,
+            "state": {
+                "success": False,
+                "error": str(e)
+            }
+        }

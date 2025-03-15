@@ -2,46 +2,97 @@
 
 ```mermaid
 flowchart TD
-    Start([User starts application]) --> SelectTheme[Toggle light/dark theme if desired]
-    SelectTheme --> SelectModel[Select Ollama model]
-    SelectModel --> SelectDiagramType[Select diagram type or use Auto]
-    SelectDiagramType --> EnterPrompt[Enter prompt for diagram]
-    EnterPrompt --> GenerateDiagram[System generates diagram]
-    GenerateDiagram --> ViewDiagram[View generated diagram]
+    Start([User starts application])
     
-    ViewDiagram --> ChangeDiagramType{Change diagram type?}
-    ChangeDiagramType -- Yes --> ClickNewType[Click new diagram type]
-    ClickNewType --> ConvertDiagram[System converts to new format]
-    ConvertDiagram --> ViewDiagram
+    subgraph ConfigScreen[Configuration Screen]
+        SelectTheme[Select theme preferences]
+        SelectPalette[Choose color palette]
+        SelectModel[Select Ollama model]
+        SelectSyntax[Select diagram syntax]
+        SelectDiagramType[Select diagram type or Auto]
+        ConfigureRAG[Configure RAG settings]
+        SelectDirectory[Select reference directory]
+        EnterTitle[Enter diagram title]
+        EnterPrompt[Enter diagram description]
+    end
     
-    ViewDiagram --> EditManually{Edit manually?}
-    EditManually -- Yes --> OpenCodeEditor[Open code editor]
-    OpenCodeEditor --> MakeChanges[Make changes to Mermaid code]
-    MakeChanges --> ApplyChanges[Apply changes]
-    ApplyChanges --> ValidateChanges{Valid syntax?}
-    ValidateChanges -- Yes --> ViewDiagram
-    ValidateChanges -- No --> ShowErrors[Show syntax errors]
-    ShowErrors --> MakeChanges
+    subgraph Generation[Generation Process]
+        ValidateConfig[Validate configuration]
+        ProcessRAG[Process reference files]
+        GenerateDiagram[Generate diagram]
+        ValidateSyntax[Validate syntax]
+        FixIssues[Fix any issues]
+    end
     
-    ChangeDiagramType -- No --> EditManually
+    subgraph Workspace[Diagram Workspace]
+        ViewDiagram[View generated diagram]
+        ViewCode[View diagram code]
+        ManageHistory[Manage diagram history]
+        ViewLogs[View system logs]
+    end
     
-    ViewDiagram --> SelectNode[Select node in diagram]
-    SelectNode --> HighlightCode[Corresponding code is highlighted]
+    Start --> ConfigScreen
     
-    EditManually -- No --> RefinePrompt{Refine via chat?}
-    RefinePrompt -- Yes --> EnterFeedback[Enter feedback in chat]
-    EnterFeedback --> GenerateDiagram
+    SelectTheme --> SelectPalette
+    SelectPalette --> SelectModel
+    SelectModel --> SelectSyntax
+    SelectSyntax --> SelectDiagramType
+    SelectDiagramType --> ConfigureRAG
     
-    RefinePrompt -- No --> SaveDiagram[Save diagram to history]
-    SaveDiagram --> ExportOptions[Export diagram]
-    SaveDiagram --> ViewHistory[View diagram history]
-    ViewHistory --> SelectOldDiagram[Select previous diagram]
-    SelectOldDiagram --> ViewDiagram
+    ConfigureRAG --> RAGDecision{Enable RAG?}
+    RAGDecision -- Yes --> SelectDirectory
+    RAGDecision -- No --> EnterTitle
+    SelectDirectory --> EnterTitle
     
-    ViewHistory --> DeleteHistory[Delete selected history item]
-    DeleteHistory --> ConfirmDelete{Confirm deletion?}
-    ConfirmDelete -- Yes --> HistoryDeleted[Item deleted]
-    ConfirmDelete -- No --> ViewHistory
+    EnterTitle --> EnterPrompt
+    EnterPrompt --> ValidateConfig
     
-    ExportOptions --> End([End session])
+    ValidateConfig --> ConfigValid{Config valid?}
+    ConfigValid -- No --> FixConfig[Fix configuration]
+    FixConfig --> ValidateConfig
+    ConfigValid -- Yes --> RAGEnabled{RAG enabled?}
+    
+    RAGEnabled -- Yes --> ProcessRAG
+    ProcessRAG --> GenerateDiagram
+    RAGEnabled -- No --> GenerateDiagram
+    
+    GenerateDiagram --> ValidateSyntax
+    ValidateSyntax --> SyntaxValid{Valid syntax?}
+    SyntaxValid -- No --> FixIssues
+    FixIssues --> ValidateSyntax
+    SyntaxValid -- Yes --> ViewDiagram
+    
+    ViewDiagram --> DiagramOptions{Select action}
+    DiagramOptions -- Edit --> ViewCode
+    DiagramOptions -- History --> ManageHistory
+    DiagramOptions -- Logs --> ViewLogs
+    
+    ViewCode --> EditCode[Make changes]
+    EditCode --> ValidateEdit{Valid changes?}
+    ValidateEdit -- No --> ShowErrors[Show error details]
+    ShowErrors --> EditCode
+    ValidateEdit -- Yes --> UpdateView[Update diagram view]
+    
+    ManageHistory --> SelectVersion[Select previous version]
+    SelectVersion --> LoadVersion[Load selected version]
+    LoadVersion --> ViewDiagram
+    
+    ViewLogs --> FilterLogs[Filter log entries]
+    FilterLogs --> ClearLogs[Clear logs if needed]
+    
+    subgraph Export[Export Options]
+        ExportDiagram[Export diagram]
+        SelectFormat[Select format]
+        SaveFile[Save to file]
+    end
+    
+    DiagramOptions -- Export --> ExportDiagram
+    ExportDiagram --> SelectFormat
+    SelectFormat --> SaveFile
+    SaveFile --> End([End session])
+    
+    style ConfigScreen fill:#f5f5f5,stroke:#333,stroke-width:2px
+    style Generation fill:#e8f4f8,stroke:#333,stroke-width:2px
+    style Workspace fill:#f0f8f0,stroke:#333,stroke-width:2px
+    style Export fill:#f8f0f0,stroke:#333,stroke-width:2px
 ```

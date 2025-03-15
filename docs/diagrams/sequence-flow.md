@@ -2,7 +2,41 @@
 
 This document contains sequence diagrams illustrating the main flows in the system.
 
-## 1. Diagram Generation Flow
+## 1. RAG Integration Flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API as FastAPI
+    participant RA as RAG Agent
+    participant OS as OllamaService
+    participant FS as File System
+
+    Client->>API: POST /diagrams/generate (with RAG config)
+    Note over API: Validate RAG directory
+    API->>RA: load_docs_from_directory(path)
+    
+    RA->>FS: Read directory contents
+    FS-->>RA: File list
+    
+    loop For each file
+        RA->>FS: Read file content
+        FS-->>RA: File content
+        RA->>OS: Generate embeddings
+        OS-->>RA: File embeddings
+        RA->>RA: Index content
+    end
+    
+    RA->>OS: Get context embeddings
+    OS-->>RA: Context vector
+    RA->>RA: Find relevant documents
+    RA-->>API: Return RAG context
+    
+    API->>API: Incorporate context into prompt
+    API-->>Client: Generation response with RAG
+```
+
+## 2. Diagram Generation Flow
 
 ```mermaid
 sequenceDiagram
@@ -34,32 +68,52 @@ sequenceDiagram
     API-->>Client: JSON response
 ```
 
-## 2. Diagram Validation Flow
+## 3. Diagram Validation Flow
 
 ```mermaid
 sequenceDiagram
     participant Client
     participant API as FastAPI
-    participant DG as DiagramGenerator
+    participant DA as DiagramAgent
+    participant VAL as DiagramValidator
     participant OS as OllamaService
     participant LLM as Ollama LLM
 
     Client->>API: POST /diagrams/validate
-    API->>DG: validate_diagram(code)
+    API->>DA: validate_diagram(code, type)
     
-    DG->>DG: Build validation prompt
-    DG->>OS: generate_completion(prompt)
+    DA->>VAL: validate(code, type)
+    VAL->>VAL: Check syntax structure
     
-    OS->>LLM: Send validation request
-    LLM-->>OS: Return validation result
-    
-    OS-->>DG: Return response
-    DG->>DG: Parse validation result
-    DG-->>API: Return validation details
-    API-->>Client: JSON response
+    alt Basic Validation Fails
+        VAL-->>DA: Return errors
+        DA-->>API: Return validation errors
+        API-->>Client: Validation response
+    else Basic Validation Passes
+        VAL->>OS: Request semantic validation
+        OS->>LLM: Process validation
+        LLM-->>OS: Validation results
+        OS-->>VAL: Return validation
+        VAL-->>DA: Combined validation results
+        DA-->>API: Return validation details
+        API-->>Client: Complete validation response
+    end
+
+    alt Auto-Fix Requested
+        Client->>API: POST /diagrams/fix
+        API->>DA: fix_diagram(code, errors)
+        DA->>OS: Request fixes
+        OS->>LLM: Generate fixes
+        LLM-->>OS: Fixed code
+        OS-->>DA: Return fixes
+        DA->>VAL: Validate fixes
+        VAL-->>DA: Validation result
+        DA-->>API: Return fixed code
+        API-->>Client: Fixed diagram code
+    end
 ```
 
-## 3. Diagram Conversion Flow
+## 4. Diagram Conversion Flow
 
 ```mermaid
 sequenceDiagram
@@ -84,36 +138,57 @@ sequenceDiagram
     API-->>Client: JSON response
 ```
 
-## 4. Error Handling Flow
+## 5. Error Handling Flow
 
 ```mermaid
 sequenceDiagram
     participant Client
     participant API as FastAPI
-    participant DG as DiagramGenerator
+    participant DA as DiagramAgent
     participant OS as OllamaService
     participant LLM as Ollama LLM
+    participant Logger
 
     Client->>API: POST /diagrams/*
     
     alt Invalid Request
-        API-->>Client: 400 Bad Request
+        API->>Logger: Log validation error
+        API-->>Client: 400 Bad Request + error details
+    else Invalid RAG Directory
+        API->>DA: method_call()
+        DA->>Logger: Log RAG error
+        DA-->>API: Directory Error
+        API-->>Client: 400 Bad Request + directory error
     else LLM Unavailable
-        API->>DG: method_call()
-        DG->>OS: generate_completion()
+        API->>DA: method_call()
+        DA->>OS: generate_completion()
         OS-xLLM: Connection Failed
-        OS-->>DG: Service Error
-        DG-->>API: Error Response
-        API-->>Client: 503 Service Unavailable
+        OS->>Logger: Log connection error
+        OS-->>DA: Service Error
+        DA-->>API: Error + Retry Strategy
+        API-->>Client: 503 + Retry-After
     else Generation Error
-        API->>DG: method_call()
-        DG->>OS: generate_completion()
+        API->>DA: method_call()
+        DA->>OS: generate_completion()
         OS->>LLM: Send Request
         LLM-->>OS: Invalid Response
-        OS-->>DG: Parse Error
-        DG-->>API: Error Details
-        API-->>Client: 500 Internal Error
+        OS->>Logger: Log generation error
+        OS-->>DA: Parse Error
+        DA->>DA: Attempt recovery
+        alt Recovery Successful
+            DA-->>API: Recovered Result
+            API-->>Client: 200 OK + Warning Header
+        else Recovery Failed
+            DA-->>API: Error Details
+            API-->>Client: 500 + Detailed Error
+        end
     end
+
+    Note over Logger: All errors include:
+    Note over Logger: - Error type and message
+    Note over Logger: - Stack trace
+    Note over Logger: - Input that caused error
+    Note over Logger: - System state
 ```
 
 ## Notes

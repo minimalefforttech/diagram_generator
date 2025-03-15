@@ -1,13 +1,15 @@
 """Core diagram generation and validation logic."""
 
 import os
-from typing import Dict, List, Optional, Tuple, Union
+import uuid
+from typing import Any, Dict, List, Optional, Tuple, Union
 
-from diagram_generator.backend.agents import DiagramAgent
+from diagram_generator.backend.agents import DiagramAgent, DiagramAgentOutput
 from diagram_generator.backend.models.configs import DiagramGenerationOptions, DiagramRAGConfig
 from diagram_generator.backend.services.ollama import OllamaService
 from diagram_generator.backend.utils.rag import RAGProvider
-
+from diagram_generator.backend.utils.diagram_validator import DiagramValidator, DiagramType
+from diagram_generator.backend.api.logs import log_info, log_error
 
 class DiagramGenerator:
     """Handles generation and validation of diagrams."""
@@ -34,11 +36,11 @@ Description: {description}
 """,
             "validate": """You are a {type} syntax validator. Check if the following diagram 
 code is valid and return a JSON response with format:
-{{
+{
     "valid": boolean,
     "errors": string[],
     "suggestions": string[]
-}}
+}
 
 Code to validate:
 {code}
@@ -54,68 +56,89 @@ Source diagram:
     async def generate_diagram(
         self,
         description: str,
-        diagram_type: str = "mermaid",
+        diagram_type: str = "mermaid", 
         options: Optional[Union[Dict, DiagramGenerationOptions]] = None
-    ) -> Tuple[str, List[str]]:
-        """Generate a diagram from a description.
-        
-        Args:
-            description: Text description of desired diagram
-            diagram_type: Target diagram syntax type
-            options: Optional generation parameters
-        
-        Returns:
-            Tuple of (diagram code, list of notes/warnings)
-        """
-        # Convert dict options to DiagramGenerationOptions if needed
+    ) -> DiagramAgentOutput:
+        """Generate a diagram from a description."""
+        # Convert dict options to DiagramGenerationOptions
         generation_options = self._prepare_options(options)
+        
+        # Extract model from options if provided
+        model = None
+        if isinstance(options, dict):
+            model = options.get("model")
+            if model and isinstance(generation_options, DiagramGenerationOptions):
+                generation_options.agent.model_name = model
         
         # Use the agent-based approach if enabled
         if generation_options.agent.enabled:
             # Initialize RAG provider if needed
             if generation_options.rag.enabled and not self.rag_provider:
-                self._setup_rag_provider(generation_options.rag)
+                await self._setup_rag_provider(generation_options.rag)
                 
             # Generate diagram with agent
             return await self.diagram_agent.generate_diagram(
                 description=description,
                 diagram_type=diagram_type,
                 options=generation_options,
-                rag_provider=self.rag_provider,
+                rag_provider=self.rag_provider
+            )
+        else:
+            # Fall back to legacy implementation if agent is disabled
+            prompt = self.prompts["generate"].format(
+                type=diagram_type,
+                description=description
             )
             
-        # Fall back to legacy implementation if agent is disabled
-        prompt = self.prompts["generate"].format(
-            type=diagram_type,
-            description=description
-        )
-        
-        response = self.llm_service.generate_completion(
-            prompt=prompt,
-            temperature=0.2  # Lower temperature for more consistent output
-        )
-        
-        # Extract diagram code and any warnings
-        raw_response = response["response"]
-        code = raw_response
-        notes = []
+            response = self.llm_service.generate_completion(
+                prompt=prompt,
+                temperature=0.2,
+                model=model or self.llm_service.model
+            )
+            
+            # Extract diagram code and any warnings
+            raw_response = response["response"]
+            code = raw_response
+            notes = []
 
-        # Try to extract diagram code from markdown blocks
-        if "```mermaid" in raw_response:
+            # Try to extract diagram code from markdown blocks based on type
+            if diagram_type.lower() == "mermaid" and "```mermaid" in raw_response:
+                try:
+                    code = raw_response.split("```mermaid")[1].split("```")[0].strip()
+                except IndexError:
+                    notes.append("Failed to extract Mermaid diagram code from markdown")
+            elif diagram_type.lower() == "plantuml" and "```plantuml" in raw_response:
+                try:
+                    code = raw_response.split("```plantuml")[1].split("```")[0].strip()
+                except IndexError:
+                    notes.append("Failed to extract PlantUML diagram code from markdown")
+
+            # Clean and validate the generated code for specific diagram types
+            if diagram_type.lower() == "mermaid":
+                code = DiagramValidator._clean_mermaid_code(code)
+            elif diagram_type.lower() == "plantuml":
+                code = DiagramValidator._clean_plantuml_code(code)
+            
             try:
-                code = raw_response.split("```mermaid")[1].split("```")[0].strip()
-            except IndexError:
-                notes.append("Failed to extract diagram code from markdown")
-        
-        try:
-            # Validate the generated diagram
-            validation = await self.validate_diagram(code, diagram_type)
-            if isinstance(validation, dict) and not validation.get("valid", False):
-                notes.extend(validation.get("errors", []))
-        except Exception as e:
-            notes.append(f"Validation warning: {str(e)}")
-        
-        return code, notes
+                # Validate the generated diagram
+                validation = await self.validate_diagram(code, diagram_type)
+                valid = validation.get("valid", False) if isinstance(validation, dict) else False
+                if not valid:
+                    notes.extend(validation.get("errors", []) if isinstance(validation, dict) else [])
+            except Exception as e:
+                notes.append(f"Validation warning: {str(e)}")
+                valid = False
+
+            # Create DiagramAgentOutput for legacy path
+            return DiagramAgentOutput(
+                code=code,
+                diagram_type=diagram_type,
+                notes=notes,
+                valid=valid,
+                iterations=1,
+                diagram_id=str(uuid.uuid4()),
+                conversation_id=str(uuid.uuid4())
+            )
 
     async def validate_diagram(
         self,
@@ -131,8 +154,6 @@ Source diagram:
         Returns:
             Dictionary containing validation results
         """
-        from diagram_generator.backend.utils.diagram_validator import DiagramValidator, DiagramType
-        
         try:
             # First use our static validator for basic syntax checking
             validation_result = DiagramValidator.validate(code, diagram_type)
@@ -167,7 +188,8 @@ Source diagram:
         self,
         diagram: str,
         source_type: str,
-        target_type: str
+        target_type: str,
+        options = None
     ) -> Tuple[str, List[str]]:
         """Convert diagram between different syntax types.
         
@@ -187,7 +209,8 @@ Source diagram:
         
         response = self.llm_service.generate_completion(
             prompt=prompt,
-            temperature=0.3
+            temperature=0.3,
+            model=options.get("model") if options else self.llm_service.model
         )
         
         code = response["response"]
@@ -206,6 +229,40 @@ Source diagram:
             notes.append(f"Validation warning: {str(e)}")
             
         return code, notes
+        
+    async def update_diagram(
+        self,
+        diagram_code: str,
+        update_notes: str,
+        diagram_type: str = "mermaid",
+        options: Optional[Union[Dict, DiagramGenerationOptions]] = None
+    ) -> DiagramAgentOutput:
+        """Update an existing diagram based on provided notes/changes.
+        
+        Args:
+            diagram_code: The existing diagram code
+            update_notes: Notes/changes to apply to the diagram
+            diagram_type: Type of diagram (mermaid, plantuml)
+            options: Optional generation options
+            
+        Returns:
+            DiagramAgentOutput containing the updated diagram
+        """
+        # Convert dict options to DiagramGenerationOptions
+        generation_options = self._prepare_options(options)
+        
+        # Initialize RAG provider if needed
+        if generation_options.rag.enabled and not self.rag_provider:
+            await self._setup_rag_provider(generation_options.rag)
+            
+        # Forward the update request to the diagram agent
+        return await self.diagram_agent.update_diagram(
+            diagram_code=diagram_code,
+            update_notes=update_notes,
+            diagram_type=diagram_type,
+            options=generation_options,
+            rag_provider=self.rag_provider
+        )
         
     def _prepare_options(
         self, 
@@ -266,19 +323,36 @@ Source diagram:
                 
         return result
         
-    def _setup_rag_provider(self, rag_config: DiagramRAGConfig) -> None:
-        """Set up the RAG provider with configuration.
-        
-        Args:
-            rag_config: RAG configuration
-        """
-        # Only set up if there's a valid directory
-        if not rag_config.api_doc_dir or not os.path.isdir(rag_config.api_doc_dir):
+    async def _setup_rag_provider(self, rag_config):
+        """Set up RAG provider if enabled."""
+        if not rag_config or not rag_config.enabled:
+            log_info("RAG disabled, skipping setup")
+            self.rag_provider = None
             return
             
-        # Initialize RAG provider and load documents
-        self.rag_provider = RAGProvider(
-            config=rag_config,
-            ollama_base_url=self.llm_service.base_url
-        )
-        self.rag_provider.load_docs_from_directory()
+        try:
+            log_info("Setting up RAG provider")
+            self.rag_provider = RAGProvider(
+                config=rag_config,
+                ollama_base_url=self.llm_service.base_url  # Use base_url from llm_service instead
+            )
+            
+            if not rag_config.api_doc_dir:
+                log_info("RAG enabled but no API doc directory provided", 
+                         {"warning": "No API doc directory provided"})
+                return
+                
+            # Fix: Pass the directory parameter to load_docs_from_directory
+            # Also pass the use_simple_file_splitting parameter to use our improved method
+            await self.rag_provider.load_docs_from_directory(
+                directory=rag_config.api_doc_dir, 
+                use_simple_file_splitting=True
+            )
+            
+            # Log stats after loading
+            log_info(f"RAG provider stats", 
+                     {"stats": self.rag_provider.stats.model_dump()})
+            
+        except Exception as e:
+            log_error(f"Error setting up RAG provider: {str(e)}", exc_info=True)
+            self.rag_provider = None

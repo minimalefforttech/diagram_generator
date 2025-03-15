@@ -1,147 +1,197 @@
 import axios from 'axios';
-import type { AxiosInstance, AxiosResponse } from 'axios';
+import { 
+  DiagramGenerationRequest, 
+  DiagramGenerationResponse, 
+  ModelInfo, 
+  ModelResponse,
+  SyntaxTypes, 
+  DiagramModifyRequest,
+  LogEntry,
+  AgentIteration,
+  AgentIterationResponse,
+  Diagram,
+  RequestChangesResponse,
+  DiagramHistoryItem,
+} from '../types/generation';
 
-export interface ValidationResponse {
-  valid: boolean;
-  errors: string[];
-  suggestions: string[];
-}
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-export interface ConversionResponse {
-  diagram: string;
-  source_type: string;
-  target_type: string;
-  notes: string[];
-}
-
-const api: AxiosInstance = axios.create({
-  baseURL: 'http://localhost:8000',
+const api = axios.create({
+  baseURL: BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-export interface DiagramGenerationRequest {
-  description: string;
-  diagram_type?: 'mermaid' | 'plantuml' | 'c4';
-  options?: {
-    agent?: {
-      enabled?: boolean;
-      max_iterations?: number;
-    };
-    rag?: {
-      enabled?: boolean;
-      api_doc_dir?: string;
-    };
+interface ErrorResponse {
+  error: string;
+  details?: string;
+}
+
+// Error logging utility
+export const logError = (error: any, context?: string): Record<string, any> => {
+  const errorMessage = error?.response?.data?.error || error?.message || String(error);
+  const errorDetails = {
+    message: errorMessage,
+    context: context || 'API Error',
+    timestamp: new Date().toISOString(),
+    type: 'error',  // Added required type field
+    details: error?.response?.data || error,
+    level: 'error'  // Added for LogEntry compatibility
   };
-}
-
-export interface DiagramGenerationResponse {
-  diagram: string;
-  type: string;
-  notes: string[];
-}
-
-export interface ConversationCreateRequest {
-  diagram_id: string;
-  message: string;
-}
-
-export interface ConversationMessage {
-  role: string;
-  content: string;
-  timestamp: string;
-  metadata: Record<string, any>;
-}
-
-export interface ConversationResponse {
-  id: string;
-  diagram_id: string;
-  messages: ConversationMessage[];
-  created_at: string;
-  updated_at: string;
-  metadata: Record<string, any>;
-}
-
-export const diagramService = {
-  generate: async (request: DiagramGenerationRequest): Promise<DiagramGenerationResponse> => {
-    const { description, diagram_type = 'mermaid', options } = request;
-    const response: AxiosResponse<DiagramGenerationResponse> = await api.post('/diagrams/generate', {
-      description,
-      diagram_type,
-      options,
-    });
-    return response.data;
-  },
-
-  validate: async (code: string, diagram_type: string = 'mermaid'): Promise<ValidationResponse> => {
-    const response: AxiosResponse<ValidationResponse> = await api.post('/diagrams/validate', {
-      code,
-      diagram_type,
-    });
-    return response.data;
-  },
-
-  convert: async (diagram: string, source_type: string, target_type: string): Promise<ConversionResponse> => {
-    const response: AxiosResponse<ConversionResponse> = await api.post('/diagrams/convert', {
-      diagram,
-      source_type,
-      target_type,
-    });
-    return response.data;
-  },
-
-  createConversation: async (request: ConversationCreateRequest): Promise<ConversationResponse> => {
-    const response: AxiosResponse<ConversationResponse> = await api.post('/diagrams/conversations', request);
-    return response.data;
-  },
-
-  getConversation: async (id: string): Promise<ConversationResponse> => {
-    const response: AxiosResponse<ConversationResponse> = await api.get(`/diagrams/conversations/${id}`);
-    return response.data;
-  },
-
-  listConversations: async (diagram_id: string): Promise<ConversationResponse[]> => {
-    const response: AxiosResponse<ConversationResponse[]> = await api.get(`/diagrams/conversations?diagram_id=${diagram_id}`);
-    return response.data;
-  },
-
-  continueConversation: async (id: string, message: string): Promise<ConversationResponse> => {
-    const response: AxiosResponse<ConversationResponse> = await api.post(`/diagrams/conversations/${id}/continue`, {
-      message,
-    });
-    return response.data;
-  },
-
-  deleteConversation: async (id: string): Promise<void> => {
-    await api.delete(`/diagrams/conversations/${id}`);
-  },
+  console.error(`[${errorDetails.context}]:`, errorDetails);
+  return errorDetails;
 };
 
-// Error handling interceptor
-api.interceptors.response.use(
-  (response: AxiosResponse) => response,
-  (error: {
-    response?: {
-      data: { detail?: string };
-      status: number;
-    };
-    request?: any;
-    message?: string;
-  }) => {
-    if (error.response) {
-      // Server responded with error status
-      const message = error.response.data.detail || 'An error occurred';
-      console.error('API Error:', message);
-      throw new Error(message);
-    } else if (error.request) {
-      // Request made but no response
-      console.error('Network Error:', error);
-      throw new Error('Network error. Please check your connection.');
-    } else {
-      // Error setting up request
-      console.error('Request Error:', error);
-      throw new Error('Error setting up request.');
+export const diagramService = {
+  async generateDiagram(
+    request: DiagramGenerationRequest
+  ): Promise<DiagramGenerationResponse> {
+    try {
+      const response = await api.post<DiagramGenerationResponse>('/diagrams/generate', request);
+      return response.data;
+    } catch (error) {
+      throw logError(error, 'Generate Diagram');
     }
-  }
-);
+  },
+
+  async getAvailableModels(provider: string): Promise<ModelInfo[]> {
+    try {
+      // The API returns a direct array of models
+      const response = await api.get<ModelInfo[]>(`/${provider}/models`);
+      return response.data || [];
+    } catch (error) {
+      console.error('Failed to fetch models:', error);
+      throw logError(error, 'Get Models');
+    }
+  },
+
+  async getSyntaxTypes(): Promise<SyntaxTypes> {
+    try {
+      const response = await api.get<SyntaxTypes>('/diagrams/syntax-types');
+      return response.data;
+    } catch (error) {
+      throw logError(error, 'Get Syntax Types');
+    }
+  },
+
+  async validateDiagram(code: string, syntax: string): Promise<{ valid: boolean; errors: string[] }> {
+    try {
+      const response = await api.post('/diagrams/validate', { code, syntax });
+      return response.data;
+    } catch (error) {
+      throw logError(error, 'Validate Diagram');
+    }
+  },
+
+  async loadRagContext(directory: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const response = await api.post('/rag/load', { directory });
+      return response.data;
+    } catch (error) {
+      throw logError(error, 'Load RAG Context');
+    }
+  },
+
+  async requestChanges(diagramId: string, changes: string, model: string, syntax: string = 'mermaid'): Promise<RequestChangesResponse> {
+    try {
+      const response = await api.post<RequestChangesResponse>(`/diagrams/diagram/${diagramId}/update`, {
+        prompt: changes,  // Changed from 'changes' to 'prompt' to match backend expectation
+        model,
+        syntax_type: syntax,  // Use the provided syntax type instead of hardcoding to 'mermaid'
+        options: {
+          agent: {
+            enabled: true,
+            max_iterations: 3,
+            model_name: model  // Include model in the agent options structure
+          }
+        }
+      });
+      return response.data;
+    } catch (error) {
+      throw logError(error, 'Request Changes');
+    }
+  },
+
+  async getAgentIterations(diagramId: string): Promise<{ iterations: AgentIteration[]; current_iteration: number }> {
+    try {
+      const response = await api.get<AgentIterationResponse>(`/diagrams/diagram/${diagramId}/iterations`);
+      return {
+        iterations: response.data.iterations,
+        current_iteration: response.data.current_iteration
+      };
+    } catch (error) {
+      throw logError(error, 'Get Agent Iterations');
+    }
+  },
+
+  async getDiagramById(diagramId: string): Promise<Diagram> {
+    try {
+      const response = await api.get<Diagram>(`/diagrams/diagram/${diagramId}`);
+      return response.data;
+    } catch (error) {
+      throw logError(error, 'Get Diagram');
+    }
+  },
+
+  async clearLogs(): Promise<void> {
+    try {
+      await api.post('/logs/clear');
+    } catch (error) {
+      throw logError(error, 'Clear Logs');
+    }
+  },
+
+  async getLogs(): Promise<LogEntry[]> {
+    try {
+      const response = await api.get<{ logs: LogEntry[] }>('/logs');
+      // Handle case where response.data.logs is undefined
+      if (!response.data || !Array.isArray(response.data.logs)) {
+        return [];  // Return empty array if no logs
+      }
+      return response.data.logs.map(log => ({
+        ...log,
+        type: log.type || 'system'  // Ensure type field is present
+      }));
+    } catch (error) {
+      // Instead of throwing, return an empty array with the error logged
+      console.error('Failed to fetch logs:', error);
+      return [];
+    }
+  },
+
+  async getDiagramHistory(): Promise<DiagramHistoryItem[]> {
+    try {
+      const response = await api.get<DiagramHistoryItem[]>('/diagrams/history');
+      return response.data;
+    } catch (error) {
+      throw logError(error, 'Get Diagram History');
+    }
+  },
+
+  async deleteDiagram(diagramId: string): Promise<{ status: string; message: string }> {
+    try {
+      const response = await api.delete<{ status: string; message: string }>(`/diagrams/diagram/${diagramId}`);
+      return response.data;
+    } catch (error) {
+      throw logError(error, 'Delete Diagram');
+    }
+  },
+
+  async clearHistory(): Promise<{ status: string; message: string; state: { diagrams_deleted: number; success: boolean } }> {
+    try {
+      const response = await api.delete<{ 
+        status: string; 
+        message: string;
+        state: {
+          diagrams_deleted: number;
+          success: boolean;
+          error?: string;
+        }
+      }>('/diagrams/clear');
+      return response.data;
+    } catch (error) {
+      throw logError(error, 'Clear Diagram History');
+    }
+  },
+};

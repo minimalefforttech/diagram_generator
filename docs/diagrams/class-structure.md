@@ -9,12 +9,40 @@ classDiagram
         +generateCompletion(prompt: string): string
     }
 
-    class DiagramGenerator {
-        -llmService: LLMService
-        +generateDiagram(prompt: string, diagramType: string): string
-        +validateDiagram(code: string, diagramType: string): ValidationResult
-        +refineDiagram(feedback: string, currentCode: string, diagramType: string): string
-        +convertDiagramType(currentCode: string, sourceType: string, targetType: string): string
+class DiagramAgent {
+        -ollama: OllamaAPI
+        -storage: Storage
+        -default_model: string
+        +generateDiagram(description: string, diagramType: string, options: DiagramGenerationOptions): DiagramAgentOutput
+        -runAgent(input: DiagramAgentInput): DiagramAgentOutput
+        -determineRequirements(description: string, diagramType: DiagramType, ragDirectory: string): Dict
+        -generateWithLLM(description: string, diagramType: string, context: string, config: AgentConfig): Dict
+        -validateMermaid(code: string): ValidationResult
+        -validatePlantuml(code: string): ValidationResult
+        -fixDiagram(code: string, diagramType: string, errors: List[str]): string
+        -stripComments(code: string): string
+        -storeResults(state: DiagramAgentState)
+    }
+
+    class RAGProvider {
+        -config: RAGConfig
+        -ollama_base_url: string
+        +loadDocsFromDirectory(directory: string): boolean
+        +getRelevantContext(query: string): SearchResult
+        +getStats(): RAGProviderStats
+    }
+
+    class DiagramAgentState {
+        +description: string
+        +diagram_type: DiagramType
+        +code: string
+        +validation_result: Dict
+        +errors: List[str]
+        +iterations: int
+        +context_section: string
+        +notes: List[str]
+        +completed: boolean
+        +requirements: Dict
     }
 
     class ConversationManager {
@@ -33,6 +61,20 @@ classDiagram
     }
 
     %% Frontend Classes
+    class ConfigurationScreen {
+        -prompt: string
+        -selectedModel: string
+        -syntax: string
+        -diagramType: string
+        -ragEnabled: boolean
+        -ragDirectory: string
+        +handleSubmit(): void
+        +savePreferences(): void
+        +renderModelMenuItems(): JSX.Element
+        +renderSyntaxMenuItems(): JSX.Element
+        +renderDiagramTypeMenuItems(): JSX.Element
+    }
+
     class ThemeProvider {
         -currentTheme: Theme
         +toggleTheme(): void
@@ -126,8 +168,42 @@ classDiagram
         +suggestions: string[]
     }
 
+    %% Models
+    class DiagramType {
+        <<enumeration>>
+        MERMAID
+        PLANTUML
+    }
+
+    class DiagramGenerationOptions {
+        +rag: RAGConfig
+        +agent: AgentConfig
+    }
+
+    class RAGConfig {
+        +enabled: boolean
+        +api_doc_dir: string
+        +similarity_threshold: float
+    }
+
+    class AgentConfig {
+        +enabled: boolean
+        +model_name: string
+        +temperature: float
+        +max_iterations: int
+        +system_prompt: string
+    }
+
     %% Relationships
-    OllamaService <-- DiagramGenerator
+    DiagramAgent --> OllamaAPI : uses
+    DiagramAgent --> Storage : uses
+    DiagramAgent --> RAGProvider : uses
+    DiagramAgent --> DiagramAgentState : manages
+    DiagramAgent -- DiagramType : uses
+    ConfigurationScreen --> DiagramAgent : triggers generation
+    RAGProvider --> OllamaAPI : uses for embeddings
+    DiagramGenerationOptions *-- RAGConfig
+    DiagramGenerationOptions *-- AgentConfig
     DiagramRepository -- Diagram
     ConversationManager -- Conversation
     Conversation *-- Message

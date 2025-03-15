@@ -1,10 +1,13 @@
-"""Ollama service for LLM integration."""
+"""Service for interacting with Ollama API."""
 
-import json
-from typing import Any, Dict, List, Optional
-
+import logging
 import requests
-from requests_cache import CachedSession
+from typing import Dict, List, Optional, Any, Union
+from requests.adapters import HTTPAdapter, Retry
+
+from diagram_generator.backend.api.logs import log_error, log_llm
+
+logger = logging.getLogger(__name__)
 
 class OllamaService:
     """Service for interacting with Ollama API."""
@@ -12,36 +15,30 @@ class OllamaService:
     def __init__(
         self,
         base_url: str = "http://localhost:11434",
-        model: str = "llama3.1:8b",
+        model: str = "llama2:latest",
         cache_expire_after: int = 3600,
     ):
-        """Initialize OllamaService.
-        
-        Args:
-            base_url: Base URL for Ollama API
-            model: Default model to use
-            cache_expire_after: Cache expiration in seconds
-        """
-        self.base_url = base_url.rstrip("/")
+        self.base_url = base_url
         self.model = model
-        
-        # Setup cached session for API calls
-        self.session = CachedSession(
-            cache_name='ollama_cache',
-            backend='sqlite',
-            expire_after=cache_expire_after
+        self.cache_expire_after = cache_expire_after
+
+        # Configure session with retries
+        self.session = requests.Session()
+        retries = Retry(
+            total=3,
+            backoff_factor=0.5,
+            status_forcelist=[500, 502, 503, 504]
         )
+        self.session.mount('http://', HTTPAdapter(max_retries=retries))
+        self.session.mount('https://', HTTPAdapter(max_retries=retries))
 
     def health_check(self) -> bool:
-        """Check if Ollama service is available.
-        
-        Returns:
-            bool: True if service is healthy, False otherwise
-        """
+        """Check if Ollama service is available."""
         try:
             response = self.session.get(f"{self.base_url}/api/version")
             return response.status_code == 200
-        except requests.RequestException:
+        except Exception as e:
+            log_error(f"Ollama health check failed: {e}", exc_info=True)
             return False
 
     def get_available_models(self) -> List[Dict[str, Any]]:
@@ -53,9 +50,36 @@ class OllamaService:
         Raises:
             requests.RequestException: If API call fails
         """
-        response = self.session.get(f"{self.base_url}/api/tags")
-        response.raise_for_status()
-        return response.json().get("models", [])
+        try:
+            response = self.session.get(f"{self.base_url}/api/tags")
+            response.raise_for_status()
+            models = response.json().get("models", [])
+            
+            # Transform the response to match our expected format
+            formatted_models = []
+            for model_info in models:
+                model_name = model_info.get("name", "")
+                    
+                formatted_models.append({
+                    "id": model_info.get("name", model_name),  # Use name as ID
+                    "name": model_name,
+                    "provider": "ollama",
+                    "size": model_info.get("size", 0),
+                    "digest": model_info.get("digest", "")
+                })
+            
+            return formatted_models
+            
+        except requests.RequestException as e:
+            # Return default model if we can't fetch the list
+            log_error(f"Failed to fetch models: {e}", exc_info=True)
+            return [{
+                "id": self.model,
+                "name": self.model,
+                "provider": "ollama",
+                "size": 0,
+                "digest": ""
+            }]
 
     def generate_completion(
         self,
@@ -64,90 +88,55 @@ class OllamaService:
         system_prompt: Optional[str] = None,
         temperature: float = 0.7,
     ) -> Dict[str, Any]:
-        """Generate a completion from Ollama.
+        """Generate a completion using the Ollama API.
         
         Args:
             prompt: The prompt to generate from
             model: Optional model override
             system_prompt: Optional system prompt
-            temperature: Sampling temperature (0.0 to 1.0)
-        
+            temperature: Model temperature (0.0 to 1.0)
+            
         Returns:
-            Dict[str, Any]: Dictionary containing the completion and metadata
-        
+            Response from Ollama API
+            
         Raises:
             requests.RequestException: If API call fails
         """
-        payload = {
-            "model": model or self.model,
-            "prompt": prompt,
-            "stream": False,
-            "options": {
-                "temperature": temperature,
-            }
-        }
-        
-        if system_prompt:
-            payload["system"] = system_prompt
-            
-        response = self.session.post(
-            f"{self.base_url}/api/generate",
-            json=payload
-        )
-        response.raise_for_status()
-        
-        return response.json()
-
-    def validate_response(
-        self,
-        response: Dict[str, Any],
-        expected_format: Optional[Dict[str, Any]] = None
-    ) -> bool:
-        """Validate an LLM response against expected format.
-        
-        Args:
-            response: The response to validate
-            expected_format: Optional expected format specification
-        
-        Returns:
-            bool: True if response is valid, False otherwise
-        """
         try:
-            if not isinstance(response, dict) or "response" not in response:
-                return False
-
-            # Format validation if specified
-            if expected_format:
-                try:
-                    parsed = json.loads(response["response"])
-                    return self._validate_against_format(parsed, expected_format)
-                except json.JSONDecodeError:
-                    return False
-
-            return True
+            request_data = {
+                "model": model or self.model,
+                "prompt": prompt,
+                "system": system_prompt,
+                "options": {
+                    "temperature": temperature,
+                }
+            }
+            # Clean up None values
+            if not request_data["system"]:
+                del request_data["system"]
+                
+            log_llm("Starting generation", {
+                "model": model or self.model,
+                "temperature": temperature,
+                "prompt_length": len(prompt),
+                "has_system_prompt": bool(system_prompt)
+            })
+            
+            response = self.session.post(
+                f"{self.base_url}/api/generate",
+                json=request_data
+            )
+            response.raise_for_status()
+            result = response.json()
+            
+            log_llm("Completed generation", {
+                "response_length": len(result.get("response", "")),
+                "model": model or self.model
+            })
+            
+            return result
             
         except Exception as e:
-            return False
-            
-    def _validate_against_format(
-        self,
-        data: Any,
-        format_spec: Any
-    ) -> bool:
-        """Recursively validate data against a format specification."""
-        if isinstance(format_spec, dict):
-            if not isinstance(data, dict):
-                return False
-            return all(
-                k in data and self._validate_against_format(data[k], v)
-                for k, v in format_spec.items()
-            )
-        elif isinstance(format_spec, list):
-            if not isinstance(data, list):
-                return False
-            return all(
-                self._validate_against_format(item, format_spec[0])
-                for item in data
-            ) if format_spec else True
-        else:
-            return isinstance(data, format_spec)
+            error_msg = f"Failed to generate completion: {str(e)}"
+            log_error(error_msg, exc_info=True)
+            raise
