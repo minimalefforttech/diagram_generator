@@ -3,146 +3,212 @@
 ## Code Style
 
 ### Python (Backend)
-- Follow PEP (Python Enhancement Proposal) 8 style guidelines
+- Follow PEP 8 style guidelines
 - Use type hints for function parameters and return values
 - Use docstrings for all functions, classes, and modules
 - Maximum line length: 120 characters
 - Use snake_case for variables and functions
 - Use PascalCase for class names
 
-### JavaScript/TypeScript (Frontend)
+### TypeScript (Frontend)
 - Follow ESLint and Prettier configurations
 - Use camelCase for variables and functions
-- Use PascalCase for component names and classes
-- Use descriptive names for functions and variables
-- Prefer functional components with hooks for React
+- Use PascalCase for component names
+- Use TypeScript interfaces for props and models
+- Prefer functional components with hooks
 
 ## Project Structure
 
 ### Backend
 ```
-backend/
-├── agents/           # LLM agent implementations
-├── api/              # API endpoints
-├── core/             # Core business logic
-├── models/           # Data models
-├── services/         # External service integrations (Ollama)
-├── utils/            # Utility functions
-└── tests/            # Test suite
+python/
+└── diagram_generator/
+    ├── backend/
+    │   ├── agents/          # Diagram generation agents
+    │   ├── api/             # FastAPI endpoints
+    │   ├── core/            # Core business logic
+    │   ├── models/          # Data models and configs
+    │   ├── services/        # External services (Ollama)
+    │   ├── storage/         # Database and persistence
+    │   └── utils/           # Utilities and helpers
+    ├── services/           # Additional services
+    └── tests/             # Test suites
 ```
 
 ### Frontend
 ```
 frontend/
-├── components/       # Reusable UI components
-│   ├── chat/         # Chat panel components
-│   ├── diagram/      # Diagram display components
-│   └── shared/       # Shared UI components
-├── hooks/            # Custom React hooks
-├── pages/            # Page components
-├── services/         # API service integration
-├── store/            # State management
-├── styles/           # CSS/SCSS files
-└── utils/            # Utility functions
+├── src/
+│   ├── components/        # React components
+│   │   ├── ConfigurationScreen.tsx  # Settings panel
+│   │   ├── DiagramEditor.tsx       # Code editor
+│   │   ├── DiagramHistory.tsx      # History browser
+│   │   ├── DiagramPanel.tsx        # Diagram display
+│   │   ├── OutputLog.tsx           # Generation logs
+│   │   ├── StatusBar.tsx           # Status updates
+│   │   └── ... 
+│   ├── contexts/          # React contexts
+│   │   ├── AppStateContext.tsx     # App state
+│   │   ├── ThemeContext.tsx        # Theme
+│   │   └── UIPreferencesContext.tsx # Preferences
+│   ├── services/          # API client
+│   ├── theme/            # Theme configuration
+│   ├── types/            # TypeScript types
+│   └── utils/            # Utilities
+└── public/              # Static assets
 ```
 
 ## UI/UX Design
 
 ### Design System
-- Base UI on Material Design principles and components
-- Implement dark theme as the default
-- Provide light/dark theme toggle in application header
-- Follow Material Design elevation system for component hierarchy
+- Material UI components and styling
+- Responsive design with mobile support
+- Dark theme by default with light option
+- Consistent spacing (8px grid system)
 
 ### Layout
-- Use a responsive design with mobile-first approach
-- Primary layout: Side-by-side chat and diagram panels on desktop, stacked on mobile
-- Use consistent spacing throughout the application (8px increment system)
-- Code editor panel should be collapsible/expandable
-- Support split-view mode between diagram and code editor
+- Configuration panel at top
+- Diagram workspace in center
+- History browser in sidebar
+- Status bar at bottom
+- Editor panel as overlay/split view
 
 ### Color Palette
-- Use Material Design color system
 - Primary: #3B82F6 (blue-500)
 - Secondary: #10B981 (green-500)
-- Accent: #8B5CF6 (purple-500)
+- Error: #DC2626 (red-600)
+- Success: #059669 (green-600)
 - Dark theme:
   - Background: #121212
   - Surface: #1E1E1E
-  - Text: #FFFFFF (high emphasis), #B3B3B3 (medium emphasis)
+  - Code: #1F2937
+  - Text: #FFFFFF (high), #B3B3B3 (medium)
 - Light theme:
   - Background: #FFFFFF
   - Surface: #F5F5F5
-  - Text: #121212 (high emphasis), #666666 (medium emphasis)
+  - Code: #F9FAFB
+  - Text: #111827 (high), #4B5563 (medium)
 
 ### Typography
-- Primary font: Inter or system-ui
-- Heading sizes:
-  - H1: 24px (1.5rem)
-  - H2: 20px (1.25rem)
-  - H3: 16px (1rem)
-- Body text: 14px (0.875rem)
-- Use consistent font weights: 400 (regular), 500 (medium), 700 (bold)
+- System font stack:
+  ```css
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, 
+               "Helvetica Neue", Arial, sans-serif;
+  ```
+- Code font:
+  ```css
+  font-family: "Fira Code", "JetBrains Mono", Menlo, Monaco, 
+               Consolas, "Liberation Mono", monospace;
+  ```
+- Size scale:
+  - H1: 24px
+  - H2: 20px
+  - H3: 16px
+  - Body: 14px
+  - Small: 12px
 
-### Components
-- Use consistent rounding (border-radius: 6px)
-- Buttons should have clear hover and active states
-- Form elements should have clear focus states
-- Use subtle animations for transitions (150-250ms)
-- Code editor should use monospace font with syntax highlighting
-- "Apply Changes" button should be prominently displayed with visual feedback on success/error
-- Selected nodes in diagram should have a distinct highlight style
-- Corresponding code sections should use background highlighting when nodes are selected
-- Diagram type selector buttons should use consistent width with icon + text
-- Selected diagram type button should have distinct active state styling
-- Diagram type buttons should be arranged in a scrollable horizontal row on mobile
+### Component Styling
 
-## Documentation
+#### Status Indicators
+- Loading spinner for active processes
+- Progress indicators for RAG processing
+- Validation status icons
+- Error/success notifications
+- Current activity text in status bar
 
-### Code Documentation
-- Include JSDoc or equivalent for all public functions and components
-- Document complex algorithms with explanatory comments
-- Keep documentation updated when code changes
+#### Configuration Panel
+- Model selector with version info
+- Syntax type buttons with icons
+- Subtype dropdown when applicable
+- RAG toggle with directory picker
+- Description/prompt fields
+
+#### Diagram Display
+- Zoom controls
+- Fit-to-view button
+- Download/copy buttons
+- Error highlights
+- Selected node highlighting
+
+#### Code Editor
+- Syntax highlighting by type
+- Line numbers
+- Error underlining
+- Matching bracket highlights
+- Auto-indent
+- Selection highlighting
+
+#### History Browser
+- Compact list view of diagrams
+- Preview on hover
+- Metadata display (type, date, etc)
+- Delete confirmation
+- Update/edit buttons
+
+## Database Conventions
+
+### Table Naming
+- Use plural nouns: `diagrams`, `conversations`
+- Use snake_case for table names
+- Include descriptive prefixes if needed
+
+### Column Naming
+- Use snake_case
+- Include foreign key prefix
+- Use descriptive names
+
+### Metadata
+- Store as JSON when flexible schema needed
+- Use specific columns for frequent queries
+- Include timestamps for all records
+
+## Git Commit Conventions
+
+- Use semantic commit messages:
+  ```
+  feat: Add RAG support
+  fix: Correct validation error handling
+  docs: Update API documentation
+  style: Format component styling
+  refactor: Simplify diagram agent
+  test: Add RAG integration tests
+  ```
+
+## Documentation Style
+
+### Code Comments
+- Use JSDoc for TypeScript
+- Follow Google Python Style for docstrings
+- Include examples for complex logic
+- Document state management
+
+### API Documentation
+- Clear endpoint descriptions
+- Complete request/response examples
+- Error scenarios documented
+- Authentication requirements
 
 ### User Documentation
-- Include tooltips for complex features
-- Provide examples for different diagram types
-- Document keyboard shortcuts
-- Include a "Getting Started" guide
-
-## Diagram Styling
-- Use consistent node sizes and spacing
-- Maintain a consistent color theme for diagram elements
-- Ensure sufficient contrast for text in diagrams
-- Limit diagram complexity for better readability
-- Support both Mermaid and PlantUML syntaxes
-- Adapt styling to match current theme (light/dark)
-- Selected nodes should have a distinct visual indicator (e.g., outline, glow effect)
-- Nodes with syntax errors should have error indicators
-
-## Git Workflow
-- Use feature branches for development
-- Write descriptive commit messages
-- Reference issue numbers in commit messages
-- Squash commits before merging to main branch
+- Task-based organization
+- Clear step-by-step guides
+- Screenshots for UI features
+- Troubleshooting section
 
 ## Accessibility
-- All interactive elements must be keyboard accessible
-- Use ARIA (Accessible Rich Internet Applications) attributes appropriately
-- Maintain a minimum contrast ratio of 4.5:1 for text
-- Support screen readers for all important content
-- Enable zoom and scaling without breaking layouts
 
-## Interactive Behaviors
-- Clicking a node in diagram highlights corresponding code section
-- Cursor placement in code can highlight corresponding diagram elements when possible
-- "Apply Changes" button should validate code before updating diagram
-- Error messages should appear inline with code when syntax errors are detected
-- Successful code application should provide subtle visual feedback
-- Auto-sync option should be toggleable (for real-time updates vs. manual updates)
-- Selecting a diagram type should visually indicate the active selection
-- When "Auto" is selected, the system should infer the diagram type from the prompt
-- Switching diagram types should provide a warning if there is already content in the prompt field
-- Changing diagram type after generation should show a loading indicator during conversion
-- After diagram type conversion, highlight changes with a subtle animation
-- Conversion failures should show appropriate error messages with recovery options
+- WCAG 2.1 AA compliance
+- Keyboard navigation support
+- Screen reader compatibility
+- Color contrast requirements
+- Focus management
+- Error announcements
+- Loading state indicators
+
+## Error Handling
+
+- User-friendly error messages
+- Clear recovery actions
+- Consistent error display
+- Logging for debugging
+- Graceful degradation
+- Retry mechanisms
