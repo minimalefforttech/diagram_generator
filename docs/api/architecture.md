@@ -1,6 +1,6 @@
 # Architecture Documentation
 
-This document provides an overview of the core components and how they interact to deliver diagram generation, validation, and conversion services.
+This document provides an overview of the core components and how they interact to generate, validate, and manage diagrams.
 
 ## System Architecture
 
@@ -8,171 +8,238 @@ This document provides an overview of the core components and how they interact 
 
 ```mermaid
 graph TB
-    API[FastAPI Routes]
-    DG[DiagramGenerator]
-    OS[OllamaService]
-    LLM[Local Ollama LLM]
-    Cache[(Request Cache)]
+    subgraph Frontend["Frontend (React)"]
+        UI[UI Components]
+        History[History Management]
+        State[State Management]
+    end
 
-    API --> DG
-    DG --> OS
-    OS --> LLM
-    OS --> Cache
+    subgraph API["API Layer (FastAPI)"]
+        Routes[API Routes]
+        Models[Data Models]
+        Storage[Storage Handler]
+    end
+
+    subgraph Agent["Diagram Agent"]
+        Tools[Tool Set]
+        LLMHandler[LLM Handler]
+        Validator[Diagram Validator]
+        RAG[RAG Provider]
+    end
+
+    subgraph External["External Services"]
+        Ollama[Ollama LLM]
+        DB[(SQLite DB)]
+    end
+
+    UI --> Routes
+    History --> Storage
+    Routes --> Agent
+    Agent --> Ollama
+    Agent --> RAG
+    Storage --> DB
+    RAG --> Ollama
 ```
 
-The system consists of three main layers:
+The system consists of four main layers:
 
-1. **API Layer** (`backend/api/diagrams.py`)
-   - FastAPI endpoints for diagram operations
-   - Request/response handling
-   - Input validation
+1. **Frontend Layer** (`frontend/src/`)
+   - React components for user interaction
+   - State management with contexts
+   - History tracking and versioning
+   - Real-time diagram preview
+
+2. **API Layer** (`backend/api/`)
+   - FastAPI endpoints for operations
+   - Data models and validation
+   - Storage management
    - Error handling
 
-2. **Core Layer** (`backend/core/diagram_generator.py`)
-   - Diagram generation logic
-   - Prompt construction
-   - Response processing
-   - Validation orchestration
+3. **Agent Layer** (`backend/agents/`)
+   - Tool-based diagram generation
+   - Validation and iteration
+   - RAG integration
+   - LLM prompt management
 
-3. **Service Layer** (`backend/services/ollama.py`)
-   - LLM communication
-   - Response caching
-   - Error handling
-   - Response validation
+4. **Storage Layer** (`backend/storage/`)
+   - SQLite database integration
+   - History persistence
+   - Version tracking
+   - Metadata management
 
 ### Component Details
 
-#### FastAPI Routes
-- Handles HTTP requests and responses
-- Routes:
-  - `/diagrams/generate`
-  - `/diagrams/validate`
-  - `/diagrams/convert`
-- Input validation using FastAPI's type system
-- Error handling with proper HTTP status codes
+#### DiagramAgent
 
-#### DiagramGenerator
-- Central business logic component
-- Responsibilities:
-  - Building LLM prompts
-  - Processing LLM responses
-  - Extracting diagram code
-  - Post-processing and cleanup
-  - Validation orchestration
+The core component using a tool-based approach:
 
-#### OllamaService
-- LLM integration layer
-- Features:
-  - Request caching
-  - Connection management
-  - Response validation
-  - Error handling
+```mermaid
+classDiagram
+    class DiagramAgent {
+        +generate_diagram()
+        +update_diagram()
+        +run_agent()
+        -determine_requirements()
+        -generate_with_llm()
+        -validate()
+        -strip_comments()
+        -fix_diagram()
+    }
+    
+    class DiagramAgentState {
+        +description: str
+        +diagram_type: DiagramType
+        +code: Optional[str]
+        +validation_result: Dict
+        +errors: List[str]
+        +iterations: int
+        +context_section: str
+        +notes: List[str]
+    }
+    
+    class Tools {
+        +validate_mermaid()
+        +validate_plantuml()
+        +strip_comments()
+        +detect_diagram_type()
+    }
+    
+    DiagramAgent -- DiagramAgentState
+    DiagramAgent -- Tools
+```
 
-## Request Flow
-
-### Diagram Generation Flow
+#### RAG Integration
 
 ```mermaid
 sequenceDiagram
-    participant Client
-    participant API as FastAPI
-    participant DG as DiagramGenerator
-    participant OS as OllamaService
+    participant UI as Frontend
+    participant API as API Layer
+    participant Agent as DiagramAgent
+    participant RAG as RAG Provider
     participant LLM as Ollama LLM
 
-    Client->>API: POST /diagrams/generate
-    Note over API: Validate request params
-    API->>DG: generate_diagram()
-    
-    DG->>DG: Create prompt
-    DG->>OS: generate_completion()
-    
-    alt Cache Hit
-        OS->>OS: Return cached response
-    else Cache Miss
-        OS->>LLM: Send prompt
-        LLM-->>OS: Return response
-        OS->>OS: Cache response
-    end
-    
-    OS-->>DG: Return completion
-    DG->>DG: Process response
-    DG->>DG: Validate diagram
-    DG-->>API: Return result
-    API-->>Client: JSON response
+    UI->>API: Generate diagram with code context
+    API->>Agent: generate_diagram(context_dir)
+    Agent->>RAG: load_docs_from_directory()
+    RAG-->>Agent: Success
+    Agent->>RAG: get_relevant_context(query)
+    RAG->>LLM: Generate embeddings
+    LLM-->>RAG: Embeddings
+    RAG-->>Agent: Relevant code context
+    Agent->>LLM: Generate diagram with context
+    LLM-->>Agent: Generated code
+    Agent->>Agent: Validate & iterate
+    Agent-->>API: Final result
+    API-->>UI: Response
 ```
 
-### Error Handling Flow
+### Generation and Validation Flow
 
 ```mermaid
-graph TD
-    A[Client Request] --> B{Input Valid?}
-    B -->|No| C[Return 400]
-    B -->|Yes| D{LLM Available?}
-    D -->|No| E[Return 503]
-    D -->|Yes| F{Generation Success?}
-    F -->|No| G[Return 500]
-    F -->|Yes| H{Validation Pass?}
-    H -->|No| I[Return with Warnings]
-    H -->|Yes| J[Return Success]
+sequenceDiagram
+    participant Frontend
+    participant API
+    participant Agent as DiagramAgent
+    participant LLM as Ollama
+    participant Validator
+
+    Frontend->>API: POST /diagrams/generate
+    API->>Agent: generate_diagram()
+    
+    rect rgb(200, 220, 240)
+        note right of Agent: Initialize State
+        Agent->>Agent: determine_requirements()
+        Agent->>Agent: setup_rag_if_enabled()
+    end
+
+    rect rgb(220, 240, 220)
+        note right of Agent: Generation Phase
+        Agent->>LLM: generate_with_llm()
+        LLM-->>Agent: Raw diagram code
+        Agent->>Agent: strip_comments()
+    end
+
+    rect rgb(240, 220, 220)
+        note right of Agent: Validation Loop
+        loop Until valid or max iterations
+            Agent->>Validator: validate()
+            Validator-->>Agent: Validation result
+            
+            alt has errors
+                Agent->>LLM: fix_diagram()
+                LLM-->>Agent: Fixed code
+                Agent->>Agent: strip_comments()
+            end
+        end
+    end
+
+    Agent->>Agent: store_results()
+    Agent-->>API: DiagramAgentOutput
+    API-->>Frontend: JSON response
 ```
 
 ## Key Design Decisions
 
-1. **Async Operations**
-   - All operations are async for better performance
-   - Allows handling multiple requests efficiently
+1. **Tool-Based Architecture**
+   - Modular tool functions for specific tasks
+   - Clear separation of concerns
+   - Easier testing and maintenance
+   - Configurable validation rules
 
-2. **Caching Strategy**
-   - Uses `requests_cache` for LLM responses
-   - Configurable cache duration
-   - Improves response times for repeated requests
+2. **RAG Integration**
+   - Code-aware diagram generation
+   - Contextual understanding
+   - Better accuracy for technical diagrams
+   - Configurable similarity thresholds
 
-3. **Error Handling**
-   - Graceful degradation
-   - Detailed error messages
-   - Proper HTTP status codes
+3. **State Management**
+   - Immutable state objects
+   - Clear progression tracking
+   - Comprehensive error handling
+   - Detailed generation logs
 
-4. **Response Processing**
-   - Markdown extraction
-   - Code formatting
-   - Validation checks
+4. **Storage Strategy**
+   - SQLite for persistence
+   - Version tracking
+   - Metadata storage
+   - Efficient querying
 
 ## Testing Strategy
 
 1. **Unit Tests**
-   - Individual component testing
-   - Mock LLM responses
-   - Error case coverage
+   - Individual tool testing
+   - State management
+   - RAG functionality
+   - Validation rules
 
 2. **Integration Tests**
-   - API endpoint testing
    - End-to-end flows
-   - Error handling verification
-
-3. **Test Coverage**
-   - Core business logic
    - API endpoints
-   - Service layer
+   - Storage operations
+   - RAG integration
+
+3. **Test Data**
+   - Sample code repositories
+   - Various diagram types
+   - Error cases
+   - Performance scenarios
 
 ## Future Considerations
 
 1. **Scalability**
-   - Load balancing
-   - Multiple LLM instances
-   - Distributed caching
+   - Distributed RAG storage
+   - Caching improvements
+   - Batch processing
+   - Multiple LLM support
 
-2. **Security**
-   - Authentication
-   - Rate limiting
-   - Input sanitization
+2. **Features**
+   - Real-time collaboration
+   - Diagram templates
+   - Custom validation rules
+   - Export options
 
 3. **Monitoring**
-   - Performance metrics
-   - Error tracking
-   - Usage statistics
-
-4. **Extensions**
-   - Additional diagram types
-   - Custom validation rules
-   - Collaborative features
+   - LLM performance tracking
+   - RAG effectiveness metrics
+   - User interaction analytics
+   - Error rate monitoring

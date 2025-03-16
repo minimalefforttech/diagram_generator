@@ -2,63 +2,102 @@
 
 A tool for generating diagrams using LLM, with a Python backend API and React frontend.
 
+## Disclaimer
+
+This project was purely an experiment, it is entirely generated with guidance from myself.  
+Otherwise known as "vibe coding".  
+Would I recommend it? No, in fact don't even credit me if you use this code.  
+I do however believe that as engineers we need to explore options we disagree with in order to widen our perspective. I did in fact learn a lot about how LLMs "think" during this project and am glad to have done it regardless of how frustrating it was.
+
+Naturally though, generated code like this has certain ethical, legal and security risks.
+
 ![Creating a new diagram](docs/screenshots/create_new_diagram.png)
 ![Generated Diagram](docs/screenshots/generated_diagram.png)
 ![Editor Panel](docs/screenshots/editor_panel.png)
 ![Output Log](docs/screenshots/output_log.png)
 
-## Disclaimer
+## Features
 
-This project was an experiment in semi-autonomous and autonomous development for learning purposes, I take no responsibility of the code.
-
-This tool may is not well tested or built for that matter.
+- Interactive diagram generation with a modern React frontend
+- Supports both Mermaid and PlantUML diagrams
+- Smart diagram generation with LLM
+- Code-aware diagram generation using RAG (Retrieval Augmented Generation)
+- Tool-based validation and iteration for reliable output
+- Diagram history and versioning
+- Clean, responsive UI with dark mode support
 
 
 ## Project Structure
 
 ```
 diagram_generator/
-├── python/                  # Python package root
-│   └── diagram_generator/   # Main Python package
-│       ├── __init__.py
-│       ├── backend/         # Backend API
-│       └── ...
+├── python/                    # Python package root
+│   └── diagram_generator/     # Main Python package
+│       ├── backend/          # Backend API
+│       │   ├── agents/      # LLM agents for diagram generation
+│       │   ├── api/         # FastAPI routes and handlers
+│       │   ├── core/        # Core business logic
+│       │   ├── models/      # Data models and configurations
+│       │   ├── services/    # External service integrations
+│       │   ├── storage/     # Database and storage handlers
+│       │   └── utils/       # Utility functions and helpers
+│       └── services/        # Additional services
 ├── docs/                    # Documentation
-├── tests/                   # Test suite
-└── frontend/                # React frontend
+│   ├── api/                # API documentation
+│   ├── design-records/     # Design decisions and evolution
+│   └── diagrams/          # Architecture diagrams
+├── frontend/               # React frontend
+│   ├── src/              
+│   │   ├── components/    # React components
+│   │   ├── contexts/      # React context providers
+│   │   ├── services/      # Frontend services
+│   │   └── utils/        # Frontend utilities
+│   └── public/           # Static assets
+├── scripts/               # Development and deployment scripts
+└── tests/                # Test suites
+    ├── integration/      # Integration tests
+    └── unit/            # Unit tests
 ```
 
-## Installation
+## Requirements
 
-### Development Installation
+- Python 3.10+
+- Node.js 18+
+- Ollama (with at least one LLM model installed)
 
-1. Clone the repository:
+## Development Setup
+
+1. Clone the repository and create virtual environment:
    ```bash
    git clone https://github.com/yourusername/diagram_generator.git
    cd diagram_generator
-   ```
-
-2. Create a virtual environment:
-   ```bash
-   # Windows
    python -m venv venv
+   
+   # Windows
    venv\Scripts\activate
    
    # macOS/Linux
-   python3 -m venv venv
    source venv/bin/activate
    ```
 
-3. Install in development mode:
+2. Install backend dependencies:
    ```bash
    pip install -e ".[dev]"
    ```
 
-Alternatively run:
-```bash
-python run.py
-```  
-Which is a quick workaround for not having to deal with pip during development 
+3. Install frontend dependencies:
+   ```bash
+   cd frontend
+   npm install
+   cd ..
+   ```
+
+4. Install and configure Ollama:
+   - Download from [ollama.ai](https://ollama.ai)
+   - Pull a compatible model:
+     ```bash
+     ollama pull llama3.1:8b
+     ```
 
 ## Running the Application
 

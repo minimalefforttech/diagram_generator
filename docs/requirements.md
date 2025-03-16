@@ -2,69 +2,137 @@
 
 ## Required Software
 
-1. **Windows Operating System**
-   - Windows 10 or later
-   - Currently only supports Windows due to PlantUML.jar binary being a Windows-specific LGPL binary
+1. **Operating System**
+   - Cross-platform support (Windows, macOS, Linux)
+   - Scripts provided for Windows (.ps1) and Unix (.sh)
 
-2. **Java Runtime Environment**
-   - Java 11 or later required
-   - Required for PlantUML diagram generation
-   - Installation instructions:
-     1. Download JRE from [Oracle](https://www.oracle.com/java/technologies/downloads/) or use OpenJDK
-     2. Add Java to system PATH
-     3. Verify installation: `java -version`
+2. **Python**
+   - Python 3.10 or later required
+   - Required for backend services and RAG processing
+   - Download from [python.org](https://www.python.org/downloads/)
+   - Verify installation: `python --version`
 
 3. **Node.js**
-   - Version 16.x or later
+   - Version 18.x or later required
    - Required for frontend development
    - Download from [nodejs.org](https://nodejs.org/)
+   - Verify installation: `node --version`
 
-4. **Python**
-   - Python 3.9 or later
-   - Required for backend services
-   - Download from [python.org](https://www.python.org/downloads/)
-
-5. **Ollama**
-   - Required for local LLM inference
+4. **Ollama**
+   - Required for local LLM inference and RAG embeddings
    - Must be running and accessible at http://localhost:11434
    - Installation instructions at [ollama.ai](https://ollama.ai)
+   - Supported models:
+     - llama3.1:8b (recommended)
+     - Other compatible Llama2 models
 
 ## Hardware Requirements
 
 - **Minimum**:
   - CPU: 4 cores
-  - RAM: 8GB
-  - Storage: 1GB for application, additional space for models
+  - RAM: 16GB (for RAG processing)
+  - Storage: 2GB for application + models
   
 - **Recommended**:
   - CPU: 8+ cores
-  - RAM: 16GB or more
-  - Storage: 2GB for application, 10GB+ for models
+  - RAM: 32GB for large codebases with RAG
+  - Storage: 5GB for application + models
   - GPU: NVIDIA GPU with 8GB+ VRAM (for improved LLM performance)
 
 ## Network Requirements
 
-- Local network access for Ollama API (localhost:11434)
+- Local network access for:
+  - Ollama API (localhost:11434)
+  - Frontend dev server (default: localhost:5173)
+  - Backend API server (default: localhost:8000)
+
 - Internet access for:
   - Initial package installation
   - Model downloads
-  - Optional: OpenRouter API if configured
+  - Optional: External API access if configured
 
 ## Browser Requirements
 
-- Modern web browser with ES6 support
-- Recommended: Chrome 90+, Firefox 90+, Edge 90+
-- Must support WebAssembly for diagram rendering
+- Modern web browser with ES6 and WebAssembly support
+- Recommended browsers:
+  - Chrome/Chromium 100+
+  - Firefox 100+
+  - Edge 100+
+  - Safari 15+
 
 ## Dependencies
 
-- **Frontend**:
+### Frontend Dependencies
+- **Core**:
   - React 18+
-  - Material-UI
-  - Mermaid.js
-  - PlantUML Viewer
+  - TypeScript 5+
+  - Vite 4+
 
-- **Backend**:
+- **UI Components**:
+  - @mui/material (Material UI)
+  - @emotion/react
+  - @emotion/styled
+
+- **Diagram Rendering**:
+  - mermaid.js
+  - plantuml-encoder
+
+- **State Management**:
+  - React Context
+  - Custom hooks
+
+### Backend Dependencies
+- **Core**:
   - FastAPI
-  - Pydantic
-  - SQLite (or PostgreSQL for production)
+  - Uvicorn
+  - Pydantic v2
+
+- **Database**:
+  - SQLite (default)
+  - SQLAlchemy
+
+- **RAG Processing**:
+  - langchain
+  - numpy
+  - sentence-transformers
+  - python-magic (file type detection)
+
+- **Utilities**:
+  - python-dotenv
+  - requests
+  - aiohttp
+  - typing_extensions
+
+## Storage Requirements
+
+1. **Application Storage**
+   - 100MB for application code
+   - 500MB for node_modules
+   - 200MB for Python virtual environment
+
+2. **Model Storage**
+   - 5GB+ for Ollama models
+   - 500MB for RAG embeddings
+
+3. **Runtime Storage**
+   - 1GB+ for temporary files
+   - 500MB for SQLite database
+   - Additional space for large code repositories when using RAG
+
+## Development Requirements
+
+1. **Tools**
+   - Git
+   - VSCode (recommended) or similar IDE
+   - Terminal with bash/powershell
+
+2. **Environment**
+   - Virtual environment support (venv)
+   - npm/node package management
+   - Environment variable configuration
+
+3. **Optional Tools**
+   - Docker for containerization
+   - pytest for testing
+   - ESLint for JavaScript/TypeScript linting
+   - Prettier for code formatting

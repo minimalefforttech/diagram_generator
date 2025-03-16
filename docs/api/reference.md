@@ -1,174 +1,223 @@
 # API Reference
 
-This document describes the publicly exposed API endpoints for diagram generation, validation, and conversion.
+This document describes the publicly exposed API endpoints for diagram generation, management, and history tracking.
 
 ## Table of Contents
 
 1. [Introduction](#introduction)
-2. [Endpoints](#endpoints)
-   - [POST /diagrams/generate](#1-post-diagramsgenerate)
-   - [POST /diagrams/validate](#2-post-diagramsvalidate)
-   - [POST /diagrams/convert](#3-post-diagramsconvert)
-3. [Example Usage](#example-usage)
+2. [Core Endpoints](#core-endpoints)
+   - [POST /diagrams/generate](#post-diagramsgenerate)
+   - [GET /diagrams/syntax-types](#get-diagramssyntax-types)
+   - [POST /diagrams/diagram/{id}/update](#post-diagramsdiagramidupdate)
+3. [History Management](#history-management)
+   - [GET /diagrams/history](#get-diagramshistory)
+   - [GET /diagrams/diagram/{id}](#get-diagramsdiagramid)
+   - [GET /diagrams/diagram/{id}/iterations](#get-diagramsdiagramiditerations)
+   - [DELETE /diagrams/diagram/{id}](#delete-diagramsdiagramid)
+   - [DELETE /diagrams/clear](#delete-diagramsclear)
 4. [Error Handling](#error-handling)
-5. [Future Enhancements](#future-enhancements)
 
 ## Introduction
 
-The system uses FastAPI to expose several endpoints under the "/diagrams" route so that users can:
-1. Generate diagrams by providing a natural language description.
-2. Validate existing diagram code.
-3. Convert diagram code between different diagram syntax types (e.g., Mermaid, PlantUML, etc.).
+The system provides RESTful API endpoints for:
+1. Generating diagrams from natural language descriptions
+2. Managing diagram history and versions
+3. Updating existing diagrams
+4. Querying available syntax types and configurations
 
-## Endpoints
+## Core Endpoints
 
-### 1. POST /diagrams/generate
+### POST /diagrams/generate
 
-Generates a diagram from a text description.
+Generates a diagram from a text description with optional code context.
 
-**URL:**  
-`POST /diagrams/generate`
-  
-**Query Parameters:**
-- `description` (string, required): The textual description of the diagram to be generated
-- `diagram_type` (string, optional): The target diagram syntax (default: "mermaid")
-- `options` (object, optional): Additional generation parameters
-
-**Response Body (JSON):**
+**Request Body:**
 ```json
 {
-    "diagram": "<diagram_code>",
-    "type": "<type_of_diagram_syntax>",
-    "notes": ["<any_additional_notes_or_warnings>"]
+    "description": "Optional user description",
+    "prompt": "The diagram prompt/description",
+    "syntax_type": "mermaid",  // or "plantuml"
+    "subtype": "auto",  // or specific type like "flowchart", "sequence", etc.
+    "model": "optional model name",
+    "options": {
+        "agent": {
+            "enabled": true,
+            "max_iterations": 3
+        },
+        "rag": {
+            "enabled": true,
+            "api_doc_dir": "/path/to/code/context"
+        }
+    }
 }
 ```
 
-**Example cURL request:**
-```bash
-curl -X POST "http://localhost:8000/diagrams/generate?description=Create+a+simple+flowchart+with+two+nodes:+Start+and+End"
-```
-
-**Example PowerShell request:**
-```powershell
-Invoke-WebRequest -Method POST -Uri "http://localhost:8000/diagrams/generate?description=Create+a+simple+flowchart+with+two+nodes:+Start+and+End"
-```
-
-### 2. POST /diagrams/validate
-
-Validates the syntax of the provided diagram code.
-
-**URL:**  
-`POST /diagrams/validate`
-
-**Query Parameters:**
-- `code` (string, required): The diagram code to validate
-- `diagram_type` (string, optional): The syntax type of the diagram (default: "mermaid")
-
-**Response Body (JSON):**
+**Response:**
 ```json
 {
-    "valid": true | false,
-    "errors": [],
-    "suggestions": []
+    "code": "generated diagram code",
+    "type": "mermaid",
+    "subtype": "flowchart",
+    "description": "user description",
+    "prompt": "original prompt",
+    "notes": ["generation notes"],
+    "iterations": 2,
+    "valid": true,
+    "diagram_id": "unique-id",
+    "conversation_id": "conversation-id"
 }
 ```
 
-**Example cURL request:**
-```bash
-curl -X POST "http://localhost:8000/diagrams/validate?diagram_type=mermaid" \
-     -H "Content-Type: application/json" \
-     --data '{"code":"graph LR;\nA-->B;"}'
-```
+### GET /diagrams/syntax-types
 
-### 3. POST /diagrams/convert
+Get available diagram syntax types and their subtypes.
 
-Converts diagram code from one syntax type to another.
-
-**URL:**  
-`POST /diagrams/convert`
-
-**Query Parameters:**
-- `diagram` (string, required): The diagram code to convert
-- `source_type` (string, required): The syntax type of the diagram code provided
-- `target_type` (string, required): The desired syntax type for the converted diagram
-
-**Response Body (JSON):**
+**Response:**
 ```json
 {
-    "diagram": "<converted_diagram_code>",
-    "source_type": "<source_type>",
-    "target_type": "<target_type>",
+    "syntax": ["mermaid", "plantuml"],
+    "types": {
+        "mermaid": ["flowchart", "sequence", "class", "state", "er", "mindmap"],
+        "plantuml": ["sequence", "class", "usecase", "activity", "component"]
+    }
+}
+```
+
+### POST /diagrams/diagram/{id}/update
+
+Update an existing diagram while preserving its structure.
+
+**Request Body:**
+```json
+{
+    "description": "Optional new description",
+    "prompt": "Changes to apply",
+    "syntax_type": "mermaid",
+    "subtype": "auto",
+    "model": "optional model name",
+    "options": {
+        "agent": {
+            "enabled": true,
+            "max_iterations": 3
+        }
+    }
+}
+```
+
+**Response:**
+```json
+{
+    "id": "diagram-id",
+    "code": "updated diagram code",
+    "type": "diagram type",
+    "description": "updated description",
+    "prompt": "update prompt",
+    "createdAt": "timestamp",
+    "metadata": {
+        "iterations": 2,
+        "valid": true
+    },
+    "notes": ["update notes"]
+}
+```
+
+## History Management
+
+### GET /diagrams/history
+
+Get history of all generated diagrams.
+
+**Response:**
+```json
+[
+    {
+        "id": "diagram-id",
+        "description": "user description",
+        "prompt": "generation prompt",
+        "syntax": "mermaid",
+        "createdAt": "timestamp",
+        "iterations": 2
+    }
+]
+```
+
+### GET /diagrams/diagram/{id}
+
+Get a specific diagram by ID.
+
+**Response:**
+```json
+{
+    "id": "diagram-id",
+    "code": "diagram code",
+    "type": "diagram type",
+    "description": "user description",
+    "prompt": "generation prompt", 
+    "createdAt": "timestamp",
+    "metadata": {
+        "iterations": 2,
+        "valid": true
+    },
     "notes": []
 }
 ```
 
-**Example cURL request:**
-```bash
-curl -X POST "http://localhost:8000/diagrams/convert?source_type=mermaid&target_type=plantuml" \
-     -H "Content-Type: application/json" \
-     --data '{"diagram":"graph LR;\nA-->B;"}'
+### GET /diagrams/diagram/{id}/iterations
+
+Get number of iterations for a specific diagram.
+
+**Response:**
+```json
+2  // Number of iterations
 ```
 
-## Example Usage
+### DELETE /diagrams/diagram/{id}
 
-Below are some example commands using PowerShell to demonstrate requests:
+Delete a specific diagram.
 
-1) Generate a flowchart (Mermaid):
-```powershell
-Invoke-WebRequest -Method POST -Uri "http://localhost:8000/diagrams/generate?description=Create+a+simple+flowchart+with+two+nodes:+Start+and+End" | Select-Object -ExpandProperty Content
+**Response:**
+```json
+{
+    "status": "success",
+    "message": "Diagram {id} deleted successfully"
+}
 ```
 
-2) Validate a snippet of Mermaid code:
-```powershell
-$jsonResponse = Invoke-WebRequest -Method POST -Uri "http://localhost:8000/diagrams/validate?diagram_type=mermaid" `
-    -Body '{"code":"graph LR; A-->B;"}' `
-    -ContentType "application/json" |
-    Select-Object -ExpandProperty Content
+### DELETE /diagrams/clear
 
-Write-Host $jsonResponse
-```
+Clear all diagram history.
 
-3) Convert a Mermaid diagram to PlantUML:
-```powershell
-$jsonResponse = Invoke-WebRequest -Method POST -Uri "http://localhost:8000/diagrams/convert?source_type=mermaid&target_type=plantuml" `
-    -Body '{"diagram":"graph LR; A-->B;"}' `
-    -ContentType "application/json" |
-    Select-Object -ExpandProperty Content
-
-Write-Host $jsonResponse
+**Response:**
+```json
+{
+    "status": "success",
+    "message": "All diagrams deleted successfully (5 diagrams)",
+    "state": {
+        "diagrams_deleted": 5,
+        "success": true
+    }
+}
 ```
 
 ## Error Handling
 
-Status Codes:
-- `400 Bad Request`: Missing or invalid parameters
-- `500 Internal Server Error`: Server-side errors or LLM service failures
+The API uses standard HTTP status codes:
+
+- `400 Bad Request`: Invalid parameters or request body
+- `404 Not Found`: Requested resource not found
+- `500 Internal Server Error`: Server-side errors
+
+Error responses include descriptive messages:
+
+```json
+{
+    "detail": "Error description"
+}
+```
 
 Common error scenarios:
-1. Missing required parameters
-2. Invalid diagram syntax
-3. LLM service unavailable
-4. Conversion between incompatible diagram types
-
-## Future Enhancements
-
-1. **Additional Diagram Types**
-   - Support for PlantUML
-   - Support for Graphviz/DOT
-   - UML class diagrams
-   - Entity-Relationship diagrams
-
-2. **Authentication & Authorization**
-   - API key authentication
-   - Rate limiting
-   - User-specific quotas
-
-3. **Storage & History**
-   - Save generated diagrams
-   - Version control
-   - Diagram sharing
-
-4. **Enhanced Validation**
-   - Syntax-specific validators
-   - Style checkers
-   - Best practice recommendations
+1. Invalid diagram syntax type or subtype
+2. Missing required parameters
+3. RAG context directory not found
+4. LLM generation failures
+5. Invalid diagram ID for updates/queries
